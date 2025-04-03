@@ -940,10 +940,10 @@ private:
             drawMixingLines();
         }
 
-        // Draw vector preview when hovering over ingredients
-        if (hoveredIngredientIndex >= 0 && mode == Mode::Normal) {
-            drawMixVectors();
-        }
+        //// Draw vector preview when hovering over ingredients
+        //if (hoveredIngredientIndex >= 0 && mode == Mode::Normal) {
+        //    drawMixVectors();
+        //}
 
         // Draw the stats panel
         drawStatsPanel();
@@ -1297,7 +1297,7 @@ private:
         // Draw the stats panel
         void drawStatsPanel() {
             const float panelWidth = 350.0f;  // Larger panel
-            const float panelHeight = 450.0f + 20.f * currentProperties.size();  // Larger panel
+            const float panelHeight = 400.0f + 20.f * currentProperties.size();  // Larger panel
             const float startX = 10.0f;
             const float startY = 10.0f;
             const float lineHeight = 30.0f;  // Increased line height
@@ -1415,7 +1415,7 @@ private:
             y += lineHeight * 1.5f;
 
             drawStatsBar("Base Value Bonus", totalBaseValueMultiple, 4.0f, startX + padding, y, panelWidth - padding * 2, 20.0f);
-            y += lineHeight * 1.5f;
+            y += lineHeight;
 
             // Value multiplier text
             sf::Text multText;
@@ -1435,7 +1435,7 @@ private:
             changeText.setFillColor(sf::Color::White);
             changeText.setPosition(startX + padding, y);
             window->draw(changeText);
-            y += lineHeight * 1.5f;
+            y += lineHeight;
 
             // Final value formula
             sf::RectangleShape formulaBox(sf::Vector2f(panelWidth - padding * 2, lineHeight * 2));
@@ -1443,7 +1443,7 @@ private:
             formulaBox.setOutlineColor(sf::Color(100, 100, 150));
             formulaBox.setOutlineThickness(1.0f);
             formulaBox.setPosition(startX + padding, y);
-            window->draw(formulaBox);
+            //window->draw(formulaBox);
 
             // Create formatted string with fixed precision
             std::stringstream formula;
@@ -1554,26 +1554,23 @@ private:
 
             const float startX = windowWidth / 2.0f + 350.0f;
             const float startY = 10.0f;
-            const float panelWidth = 250;  // Larger panel
-            const float panelHeight = 350.0f;  // Larger panel
-
-            // Draw preview panel
-            sf::RectangleShape panel(sf::Vector2f(panelWidth, panelHeight));
-            panel.setFillColor(sf::Color(20, 20, 30, 230));
-            panel.setOutlineColor(sf::Color(100, 160, 100));
-            panel.setOutlineThickness(2.0f);
-            panel.setPosition(startX, startY);
-            //window->draw(panel);
+            const float panelWidth = 250;
+            const float panelHeight = 350.0f;
 
             // Title
             sf::Text titleText;
             titleText.setFont(font);
             titleText.setString("Preview Mix: " + ingredientButtons[selectedIngredientIndex].id);
-            titleText.setCharacterSize(18);  // Increased font size
+            titleText.setCharacterSize(18);
             titleText.setFillColor(sf::Color::White);
             titleText.setStyle(sf::Text::Bold);
             titleText.setPosition(startX + 15.0f, startY + 15.0f);
             window->draw(titleText);
+
+            // Draw vectors on the map showing how properties will move
+            const float centerX = windowWidth / 2.0f;
+            const float centerY = windowHeight / 2.0f;
+            const float scaleFactor = 80.0f; // Same scale as used elsewhere
 
             // Extract current properties for mixing calculation
             std::vector<Property*> currentProps;
@@ -1581,15 +1578,184 @@ private:
                 currentProps.push_back(prop.property);
             }
 
-            // Calculate result properties
+            // Calculate result properties to identify new properties that will be added
             std::vector<Property*> resultProps = PropertyMixCalculator::mixProperties(
                 currentProps, previewNewProperty, DrugType::Marijuana);
 
-            // Draw preview result
+            // Identify new properties that will be added (not in current properties)
+            std::vector<Property*> newProps;
+            for (Property* resultProp : resultProps) {
+                bool exists = false;
+                for (Property* currentProp : currentProps) {
+                    if (currentProp == resultProp) {
+                        exists = true;
+                        break;
+                    }
+                }
+
+                // If this is the new property being added directly and it's not already in currentProps
+                if (resultProp == previewNewProperty && !exists) {
+                    newProps.push_back(resultProp);
+                }
+                // If it's a property that emerged from mixing and isn't already in currentProps
+                else if (resultProp != previewNewProperty && !exists) {
+                    newProps.push_back(resultProp);
+                }
+            }
+
+            // Draw the mix direction vectors for each active property
+            for (const auto& propWithOrigin : currentProperties) {
+                Property* currentProp = propWithOrigin.property;
+                MixerMapEffect* effect = mixerMap->getEffect(currentProp);
+
+                if (effect) {
+                    // Current property position
+                    float startX = centerX + effect->position.x * scaleFactor;
+                    float startY = centerY - effect->position.y * scaleFactor; // Y is inverted in SFML
+
+                    // Calculate where it would move to
+                    Vector2 endVector = effect->position +
+                        (previewNewProperty->mixDirection * previewNewProperty->mixMagnitude);
+
+                    float endX = centerX + endVector.x * scaleFactor;
+                    float endY = centerY - endVector.y * scaleFactor; // Y is inverted in SFML
+
+                    // Check if this property will be transformed
+                    bool willTransform = true;
+                    for (Property* resultProp : resultProps) {
+                        if (resultProp == currentProp) {
+                            willTransform = false;
+                            break;
+                        }
+                    }
+
+                    // Set line color based on whether transformation will occur
+                    sf::Color startColor = willTransform ? sf::Color(50, 200, 50, 200) : sf::Color(80, 200, 255, 200);
+                    sf::Color endColor = willTransform ? sf::Color(220, 220, 0, 200) : sf::Color(120, 220, 255, 200);
+
+                    // Draw thicker vector lines with multiple offsets
+// First draw black outline for contrast
+                    for (int i = -2; i <= 2; i++) {
+                        for (int j = -2; j <= 2; j++) {
+                            if (std::abs(i) <= 1 && std::abs(j) <= 1) continue; // Skip inner positions (reserved for colored line)
+
+                            sf::Vertex outlineLine[] = {
+                                sf::Vertex(sf::Vector2f(startX + i, startY + j), sf::Color(0, 0, 0, 150)),
+                                sf::Vertex(sf::Vector2f(endX + i, endY + j), sf::Color(0, 0, 0, 150))
+                            };
+                            window->draw(outlineLine, 2, sf::Lines);
+                        }
+                    }
+
+                    // Then draw the colored line with gradient
+                    for (int i = -1; i <= 1; i++) {
+                        for (int j = -1; j <= 1; j++) {
+                            sf::Vertex thickLine[] = {
+                                sf::Vertex(sf::Vector2f(startX + i, startY + j), startColor),
+                                sf::Vertex(sf::Vector2f(endX + i, endY + j), endColor)
+                            };
+                            window->draw(thickLine, 2, sf::Lines);
+                        }
+                    }
+
+                    // Draw an arrow head
+                    float angle = std::atan2(startY - endY, endX - startX); // Note: y coords are inverted
+                    float arrowSize = 10.0f;
+
+                    for (int i = -1; i <= 1; i++) {
+                        for (int j = -1; j <= 1; j++) {
+                            sf::Vertex arrowHead[] = {
+                                sf::Vertex(sf::Vector2f(endX + i, endY + j), endColor),
+                                sf::Vertex(sf::Vector2f(
+                                    endX - arrowSize * std::cos(angle - 0.5f) + i,
+                                    endY + arrowSize * std::sin(angle - 0.5f) + j),  // Y inverted
+                                    endColor),
+                                sf::Vertex(sf::Vector2f(endX + i, endY + j), endColor),
+                                sf::Vertex(sf::Vector2f(
+                                    endX - arrowSize * std::cos(angle + 0.5f) + i,
+                                    endY + arrowSize * std::sin(angle + 0.5f) + j),  // Y inverted
+                                    endColor)
+                            };
+                            window->draw(arrowHead, 4, sf::Lines);
+                        }
+                    }
+
+                    // Find what property, if any, would be at the end position
+                    MixerMapEffect* resultEffect = mixerMap->getEffectAtPoint(endVector);
+                    if (resultEffect) {
+                        // Draw a small circle to indicate the target property
+                        sf::CircleShape targetCircle(5.0f);
+                        targetCircle.setFillColor(endColor);
+                        targetCircle.setOutlineColor(sf::Color::Black);
+                        targetCircle.setOutlineThickness(1.0f);
+                        targetCircle.setPosition(endX - 5.0f, endY - 5.0f); // Center the circle
+                        window->draw(targetCircle);
+
+                        // Only show target property name if it's different from the current one
+                        if (resultEffect->property != currentProp) {
+                            // Draw a small label with the target property name
+                            sf::Text targetLabel;
+                            targetLabel.setFont(font);
+                            targetLabel.setString("→ " + resultEffect->property->name);
+                            targetLabel.setCharacterSize(12);
+                            targetLabel.setFillColor(sf::Color::White);
+                            targetLabel.setOutlineColor(sf::Color::Black);
+                            targetLabel.setOutlineThickness(1.0f);
+                            targetLabel.setPosition(endX + 8.0f, endY - 6.0f);
+                            window->draw(targetLabel);
+                        }
+                    }
+                }
+            }
+
+            // Draw new properties that will be added (not from transformations)
+            for (Property* newProp : newProps) {
+                MixerMapEffect* effect = mixerMap->getEffect(newProp);
+                if (effect) {
+                    float x = centerX + effect->position.x * scaleFactor;
+                    float y = centerY - effect->position.y * scaleFactor; // Y is inverted in SFML
+
+                    // Draw a pulsing circle to highlight new properties
+                    float pulseScale = 1.0f + 0.2f * sin(clock.getElapsedTime().asSeconds() * 4.0f);
+                    float radius = effect->radius * scaleFactor * pulseScale;
+
+                    // Draw outer glow
+                    sf::CircleShape newPropGlow(radius * 1.2f);
+                    newPropGlow.setFillColor(sf::Color(100, 255, 100, 50)); // Green glow
+                    newPropGlow.setPosition(x - newPropGlow.getRadius(), y - newPropGlow.getRadius());
+                    window->draw(newPropGlow);
+
+                    // Draw the new property circle
+                    sf::CircleShape newPropCircle(radius);
+                    sf::Color propColor = tierColors[newProp->tier];
+                    newPropCircle.setFillColor(sf::Color(propColor.r, propColor.g, propColor.b, 180));
+                    newPropCircle.setOutlineColor(sf::Color(100, 255, 100)); // Green outline
+                    newPropCircle.setOutlineThickness(2.0f);
+                    newPropCircle.setPosition(x - newPropCircle.getRadius(), y - newPropCircle.getRadius());
+                    window->draw(newPropCircle);
+
+                    // Draw "NEW" text above the property
+                    sf::Text newText;
+                    newText.setFont(font);
+                    newText.setString("NEW");
+                    newText.setCharacterSize(14);
+                    newText.setFillColor(sf::Color::White);
+                    newText.setOutlineColor(sf::Color::Black);
+                    newText.setOutlineThickness(1.0f);
+                    newText.setStyle(sf::Text::Bold);
+                    newText.setPosition(
+                        x - newText.getLocalBounds().width / 2.0f,
+                        y - radius - 20.0f
+                    );
+                    window->draw(newText);
+                }
+            }
+
+            // Draw result properties
             sf::Text resultTitle;
             resultTitle.setFont(font);
             resultTitle.setString("Result Properties:");
-            resultTitle.setCharacterSize(16);  // Increased font size
+            resultTitle.setCharacterSize(16);
             resultTitle.setFillColor(sf::Color::White);
             resultTitle.setStyle(sf::Text::Bold);
             resultTitle.setPosition(startX + 15.0f, startY + 50.0f);
@@ -1603,7 +1769,7 @@ private:
                 // Check if this is a new property (not in current properties)
                 bool isNew = true;
                 for (const auto& currentProp : currentProps) {
-                    if (currentProp->id == prop->id) {
+                    if (currentProp == prop) {  // Use pointer comparison
                         isNew = false;
                         break;
                     }
@@ -1613,7 +1779,7 @@ private:
                 sf::Text propText;
                 propText.setFont(font);
                 propText.setString(std::to_string(i + 1) + ". " + prop->name + " (Tier " + std::to_string(prop->tier) + ")");
-                propText.setCharacterSize(16);  // Increased font size
+                propText.setCharacterSize(16);
 
                 if (isNew) {
                     // New property - highlight green
@@ -1628,9 +1794,10 @@ private:
                 propText.setPosition(startX + 25.0f, y);
                 window->draw(propText);
 
-                y += 30.0f;  // Increased line height
+                y += 30.0f;
             }
 
+            // Rest of the preview panel code (stats changes, etc.) remains the same
             // Calculate and show stats changes
             float currentAddictiveness = 0.0f;
             float currentBaseValue = 0.0f;
@@ -1664,7 +1831,7 @@ private:
             sf::Text statsTitle;
             statsTitle.setFont(font);
             statsTitle.setString("Stats Changes:");
-            statsTitle.setCharacterSize(16);  // Increased font size
+            statsTitle.setCharacterSize(16);
             statsTitle.setFillColor(sf::Color::White);
             statsTitle.setStyle(sf::Text::Bold);
             statsTitle.setPosition(startX + 15.0f, y);
@@ -1674,15 +1841,15 @@ private:
 
             // Addictiveness change
             drawStatChange("Addictiveness", currentAddictiveness, newAddictiveness, startX + 25.0f, y);
-            y += 30.0f;  // Increased line height
+            y += 30.0f;
 
             // Base value change
             drawStatChange("Base Value Bonus", currentBaseValue, newBaseValue, startX + 25.0f, y);
-            y += 30.0f;  // Increased line height
+            y += 30.0f;
 
             // Multiplier change
             drawStatChange("Value Multiplier", currentMultiplier, newMultiplier, startX + 25.0f, y);
-            y += 30.0f;  // Increased line height
+            y += 30.0f;
 
             // Value change
             drawStatChange("Value Change", (float)currentValueChange, (float)newValueChange, startX + 25.0f, y);
@@ -1690,13 +1857,11 @@ private:
             // Instructions
             sf::Text instructionsText;
             instructionsText.setFont(font);
-            instructionsText.setString("'Confirm Mix' to apply \n'Cancel' to go back\nYou can also click on another ingredient.");
+            instructionsText.setString("'Confirm Mix' to apply \n'Cancel' to go back");
             instructionsText.setCharacterSize(12);
             instructionsText.setFillColor(sf::Color(180, 180, 180));
-            instructionsText.setPosition(startX + 15.0f, y + 30.f);
+            instructionsText.setPosition(startX + 15.0f, y + 40.0f);
             window->draw(instructionsText);
-
-            
         }
 
         // Draw a stat change with arrow indicator

@@ -197,7 +197,7 @@ public:
         float buttonHeight = 20.0f;
         float buttonWidth = 160.0f;
         float padding = 5.0f;
-        float startX = 10.0f;
+        float startX = 20.0f;
         float startY = 650.0f; // Position below ingredient buttons
 
         int index = 0;
@@ -430,9 +430,9 @@ private:
     void createIngredientButtons() {
         float startY = 60.0f;
         float buttonHeight = 20.0f;  // Increased button height
-        float buttonWidth = 200.0f;  // Increased button width
+        float buttonWidth = 120.f;  // Increased button width
         float padding = 10.0f;
-        float startX = windowWidth - buttonWidth - padding;
+        float startX = windowWidth - buttonWidth - padding - 20.f;
 
         int index = 0;
         for (const auto& pair : ingredientPropertyMapping) {
@@ -1249,8 +1249,8 @@ private:
 
         // Add a new method to draw the products panel
         void drawProductsPanel() {
-            float panelWidth = 220.0f;
-            float panelHeight = 250.0f;
+            float panelWidth = 180.f;
+            float panelHeight = 210.0f;
             float startX = 10.0f;
             float startY = 600.0f; // Position below ingredient panel
 
@@ -1297,7 +1297,7 @@ private:
         // Draw the stats panel
         void drawStatsPanel() {
             const float panelWidth = 350.0f;  // Larger panel
-            const float panelHeight = 450.0f;  // Larger panel
+            const float panelHeight = 450.0f + 20.f * currentProperties.size();  // Larger panel
             const float startX = 10.0f;
             const float startY = 10.0f;
             const float lineHeight = 30.0f;  // Increased line height
@@ -1454,7 +1454,7 @@ private:
             sf::Text formulaText;
             formulaText.setFont(font);
             formulaText.setString(formula.str());
-            formulaText.setCharacterSize(16);  // Increased font size
+            formulaText.setCharacterSize(14);  // Increased font size
             formulaText.setFillColor(sf::Color::Yellow);
             formulaText.setPosition(startX + padding * 2, y + padding);
             window->draw(formulaText);
@@ -1462,8 +1462,8 @@ private:
 
         // Draw the ingredients panel
         void drawIngredientsPanel() {
-            float panelWidth = 220.0f;  // Wider panel
-            float panelHeight = 620.0f;  // Taller panel
+            float panelWidth = 160.f;  // Wider panel
+            float panelHeight = 530.f;  // Taller panel
             float startX = windowWidth - panelWidth - 10.0f;
             float startY = 10.0f;
 
@@ -1498,11 +1498,11 @@ private:
                 float historyStartY = ingredientButtons.back().shape.getPosition().y +
                     ingredientButtons.back().shape.getSize().y + 30.0f;
 
-                // Draw separator line
-                sf::RectangleShape separator(sf::Vector2f(panelWidth - 30.0f, 1.0f));
-                separator.setFillColor(sf::Color(100, 100, 150));
-                separator.setPosition(startX + 15.0f, historyStartY - 15.0f);
-                window->draw(separator);
+                //// Draw separator line
+                //sf::RectangleShape separator(sf::Vector2f(panelWidth - 30.0f, 1.0f));
+                //separator.setFillColor(sf::Color(100, 100, 150));
+                //separator.setPosition(startX + 15.0f, historyStartY - 15.0f);
+                //window->draw(separator);
 
                 // History title
                 sf::Text historyTitle;
@@ -1552,7 +1552,7 @@ private:
         void drawPreview() {
             if (!previewNewProperty) return;
 
-            const float startX = windowWidth / 2.0f + 300.0f;
+            const float startX = windowWidth / 2.0f + 350.0f;
             const float startY = 10.0f;
             const float panelWidth = 250;  // Larger panel
             const float panelHeight = 350.0f;  // Larger panel

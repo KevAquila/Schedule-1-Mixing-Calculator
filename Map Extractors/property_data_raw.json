@@ -1,0 +1,763 @@
+{
+  "productManagerAddress": "0x1ce74be06c0",
+  "mixMaps": {
+    "weed": {
+      "mapRadius": 4,
+      "effects": [
+        {
+          "position": {"x": 1.03, "y": 0.02},
+          "radius": 0.4,
+          "property": {
+            "id": "calming",
+            "name": "Calming",
+            "tier": 1,
+            "addictiveness": 0,
+            "valueChange": 0,
+            "valueMultiplier": 1,
+            "addBaseValueMultiple": 0.1,
+            "mixDirection": {"x": 0.999811, "y": 0.0194138},
+            "mixMagnitude": 1.03019
+          }
+        },
+        {
+          "position": {"x": 0, "y": 1.07},
+          "radius": 0.4,
+          "property": {
+            "id": "Euphoric",
+            "name": "Euphoric",
+            "tier": 1,
+            "addictiveness": 0.235,
+            "valueChange": 0,
+            "valueMultiplier": 1,
+            "addBaseValueMultiple": 0.18,
+            "mixDirection": {"x": 0, "y": 1},
+            "mixMagnitude": 1.07
+          }
+        },
+        {
+          "position": {"x": -1.04, "y": 0.05},
+          "radius": 0.4,
+          "property": {
+            "id": "Focused",
+            "name": "Focused",
+            "tier": 1,
+            "addictiveness": 0.104,
+            "valueChange": 0,
+            "valueMultiplier": 1,
+            "addBaseValueMultiple": 0.16,
+            "mixDirection": {"x": -0.998846, "y": 0.0480215},
+            "mixMagnitude": 1.0412
+          }
+        },
+        {
+          "position": {"x": 0.03, "y": -1.03},
+          "radius": 0.4,
+          "property": {
+            "id": "munchies",
+            "name": "Munchies",
+            "tier": 1,
+            "addictiveness": 0.096,
+            "valueChange": 0,
+            "valueMultiplier": 1,
+            "addBaseValueMultiple": 0.12,
+            "mixDirection": {"x": 0.0291139, "y": -0.999576},
+            "mixMagnitude": 1.03044
+          }
+        },
+        {
+          "position": {"x": -1.16, "y": -1.06},
+          "radius": 0.4,
+          "property": {
+            "id": "paranoia",
+            "name": "Paranoia",
+            "tier": 1,
+            "addictiveness": 0,
+            "valueChange": 0,
+            "valueMultiplier": 1,
+            "addBaseValueMultiple": 0,
+            "mixDirection": {"x": -0.73821, "y": -0.674571},
+            "mixMagnitude": 1.57137
+          }
+        },
+        {
+          "position": {"x": -1.13, "y": 1.14},
+          "radius": 0.4,
+          "property": {
+            "id": "refreshing",
+            "name": "Refreshing",
+            "tier": 1,
+            "addictiveness": 0.104,
+            "valueChange": 0,
+            "valueMultiplier": 1,
+            "addBaseValueMultiple": 0.14,
+            "mixDirection": {"x": -0.703985, "y": 0.710215},
+            "mixMagnitude": 1.60515
+          }
+        },
+        {
+          "position": {"x": 1.27, "y": -1.12},
+          "radius": 0.4,
+          "property": {
+            "id": "smelly",
+            "name": "Smelly",
+            "tier": 1,
+            "addictiveness": 0,
+            "valueChange": 0,
+            "valueMultiplier": 1,
+            "addBaseValueMultiple": 0,
+            "mixDirection": {"x": 0.75001, "y": -0.661426},
+            "mixMagnitude": 1.69331
+          }
+        },
+        {
+          "position": {"x": 1.11, "y": 1.15},
+          "radius": 0.4,
+          "property": {
+            "id": "caloriedense",
+            "name": "Calorie-Dense",
+            "tier": 2,
+            "addictiveness": 0.1,
+            "valueChange": 0,
+            "valueMultiplier": 1,
+            "addBaseValueMultiple": 0.28,
+            "mixDirection": {"x": 0.694483, "y": 0.719509},
+            "mixMagnitude": 1.59831
+          }
+        },
+        {
+          "position": {"x": -0.59, "y": 2.06},
+          "radius": 0.4,
+          "property": {
+            "id": "disorienting",
+            "name": "Disorienting",
+            "tier": 2,
+            "addictiveness": 0,
+            "valueChange": 0,
+            "valueMultiplier": 1,
+            "addBaseValueMultiple": 0,
+            "mixDirection": {"x": -0.275337, "y": 0.961348},
+            "mixMagnitude": 2.14283
+          }
+        },
+        {
+          "position": {"x": -2.14, "y": 0.57},
+          "radius": 0.4,
+          "property": {
+            "id": "energizing",
+            "name": "Energizing",
+            "tier": 2,
+            "addictiveness": 0.34,
+            "valueChange": 0,
+            "valueMultiplier": 1,
+            "addBaseValueMultiple": 0.22,
+            "mixDirection": {"x": -0.96631, "y": 0.257382},
+            "mixMagnitude": 2.21461
+          }
+        },
+        {
+          "position": {"x": -0.592, "y": -2},
+          "radius": 0.4,
+          "property": {
+            "id": "gingeritis",
+            "name": "Gingeritis",
+            "tier": 2,
+            "addictiveness": 0,
+            "valueChange": 0,
+            "valueMultiplier": 1,
+            "addBaseValueMultiple": 0.2,
+            "mixDirection": {"x": -0.283827, "y": -0.958875},
+            "mixMagnitude": 2.08578
+          }
+        },
+        {
+          "position": {"x": 2.1, "y": -0.4},
+          "radius": 0.4,
+          "property": {
+            "id": "sedating",
+            "name": "Sedating",
+            "tier": 2,
+            "addictiveness": 0,
+            "valueChange": 0,
+            "valueMultiplier": 1,
+            "addBaseValueMultiple": 0.26,
+            "mixDirection": {"x": 0.982339, "y": -0.187112},
+            "mixMagnitude": 2.13776
+          }
+        },
+        {
+          "position": {"x": 0.77, "y": -1.97},
+          "radius": 0.4,
+          "property": {
+            "id": "sneaky",
+            "name": "Sneaky",
+            "tier": 2,
+            "addictiveness": 0.327,
+            "valueChange": 0,
+            "valueMultiplier": 1,
+            "addBaseValueMultiple": 0.24,
+            "mixDirection": {"x": 0.364043, "y": -0.931382},
+            "mixMagnitude": 2.11514
+          }
+        },
+        {
+          "position": {"x": 2.21, "y": 0.69},
+          "radius": 0.4,
+          "property": {
+            "id": "toxic",
+            "name": "Toxic",
+            "tier": 2,
+            "addictiveness": 0,
+            "valueChange": 0,
+            "valueMultiplier": 1,
+            "addBaseValueMultiple": 0,
+            "mixDirection": {"x": 0.954557, "y": 0.298029},
+            "mixMagnitude": 2.31521
+          }
+        },
+        {
+          "position": {"x": -2.23, "y": -0.58},
+          "radius": 0.4,
+          "property": {
+            "id": "athletic",
+            "name": "Athletic",
+            "tier": 3,
+            "addictiveness": 0.607,
+            "valueChange": 0,
+            "valueMultiplier": 1,
+            "addBaseValueMultiple": 0.32,
+            "mixDirection": {"x": -0.967801, "y": -0.251715},
+            "mixMagnitude": 2.30419
+          }
+        },
+        {
+          "position": {"x": -0.14, "y": -2.99},
+          "radius": 0.4,
+          "property": {
+            "id": "balding",
+            "name": "Balding",
+            "tier": 3,
+            "addictiveness": 0,
+            "valueChange": 0,
+            "valueMultiplier": 1,
+            "addBaseValueMultiple": 0.3,
+            "mixDirection": {"x": -0.0467715, "y": -0.998906},
+            "mixMagnitude": 2.99328
+          }
+        },
+        {
+          "position": {"x": 0.51, "y": 2.22},
+          "radius": 0.4,
+          "property": {
+            "id": "foggy",
+            "name": "Foggy",
+            "tier": 3,
+            "addictiveness": 0.1,
+            "valueChange": 0,
+            "valueMultiplier": 1,
+            "addBaseValueMultiple": 0.36,
+            "mixDirection": {"x": 0.223898, "y": 0.974613},
+            "mixMagnitude": 2.27783
+          }
+        },
+        {
+          "position": {"x": -2.07, "y": 1.53},
+          "radius": 0.4,
+          "property": {
+            "id": "laxative",
+            "name": "Laxative",
+            "tier": 3,
+            "addictiveness": 0.1,
+            "valueChange": 0,
+            "valueMultiplier": 1,
+            "addBaseValueMultiple": 0,
+            "mixDirection": {"x": -0.804176, "y": 0.594391},
+            "mixMagnitude": 2.57406
+          }
+        },
+        {
+          "position": {"x": -1.67, "y": -2.09},
+          "radius": 0.4,
+          "property": {
+            "id": "seizure",
+            "name": "Seizure-Inducing",
+            "tier": 3,
+            "addictiveness": 0,
+            "valueChange": 0,
+            "valueMultiplier": 1,
+            "addBaseValueMultiple": 0,
+            "mixDirection": {"x": -0.624239, "y": -0.781233},
+            "mixMagnitude": 2.67526
+          }
+        },
+        {
+          "position": {"x": 2.04, "y": -1.66},
+          "radius": 0.4,
+          "property": {
+            "id": "slippery",
+            "name": "Slippery",
+            "tier": 3,
+            "addictiveness": 0.309,
+            "valueChange": 0,
+            "valueMultiplier": 1,
+            "addBaseValueMultiple": 0.34,
+            "mixDirection": {"x": 0.775649, "y": -0.631165},
+            "mixMagnitude": 2.63006
+          }
+        },
+        {
+          "position": {"x": 1.99, "y": 1.75},
+          "radius": 0.4,
+          "property": {
+            "id": "spicy",
+            "name": "Spicy",
+            "tier": 3,
+            "addictiveness": 0.665,
+            "valueChange": 0,
+            "valueMultiplier": 1,
+            "addBaseValueMultiple": 0.38,
+            "mixDirection": {"x": 0.750938, "y": 0.660373},
+            "mixMagnitude": 2.65002
+          }
+        },
+        {
+          "position": {"x": 3.03, "y": -0.04},
+          "radius": 0.4,
+          "property": {
+            "id": "brighteyed",
+            "name": "Bright-Eyed",
+            "tier": 4,
+            "addictiveness": 0.2,
+            "valueChange": 0,
+            "valueMultiplier": 1,
+            "addBaseValueMultiple": 0.4,
+            "mixDirection": {"x": 0.999913, "y": -0.0132002},
+            "mixMagnitude": 3.03026
+          }
+        },
+        {
+          "position": {"x": 1.4, "y": 2.59},
+          "radius": 0.4,
+          "property": {
+            "id": "glowie",
+            "name": "Glowing",
+            "tier": 4,
+            "addictiveness": 0.472,
+            "valueChange": 0,
+            "valueMultiplier": 1,
+            "addBaseValueMultiple": 0.48,
+            "mixDirection": {"x": 0.475517, "y": 0.879707},
+            "mixMagnitude": 2.94416
+          }
+        },
+        {
+          "position": {"x": -1.45, "y": -3.05},
+          "radius": 0.4,
+          "property": {
+            "id": "jennerising",
+            "name": "Jennerising",
+            "tier": 4,
+            "addictiveness": 0.343,
+            "valueChange": 0,
+            "valueMultiplier": 1,
+            "addBaseValueMultiple": 0.42,
+            "mixDirection": {"x": -0.429359, "y": -0.903134},
+            "mixMagnitude": 3.37713
+          }
+        },
+        {
+          "position": {"x": -3.2, "y": 0.06},
+          "radius": 0.4,
+          "property": {
+            "id": "lethal",
+            "name": "Lethal",
+            "tier": 4,
+            "addictiveness": 0,
+            "valueChange": 0,
+            "valueMultiplier": 1,
+            "addBaseValueMultiple": 0,
+            "mixDirection": {"x": -0.999824, "y": 0.0187467},
+            "mixMagnitude": 3.20056
+          }
+        },
+        {
+          "position": {"x": 2.27, "y": -2.71},
+          "radius": 0.4,
+          "property": {
+            "id": "schizophrenic",
+            "name": "Schizophrenic",
+            "tier": 4,
+            "addictiveness": 0,
+            "valueChange": 0,
+            "valueMultiplier": 1,
+            "addBaseValueMultiple": 0,
+            "mixDirection": {"x": 0.64213, "y": -0.766596},
+            "mixMagnitude": 3.53511
+          }
+        },
+        {
+          "position": {"x": -2.62, "y": -1.54},
+          "radius": 0.4,
+          "property": {
+            "id": "thoughtprovoking",
+            "name": "Thought-Provoking",
+            "tier": 4,
+            "addictiveness": 0.37,
+            "valueChange": 0,
+            "valueMultiplier": 1,
+            "addBaseValueMultiple": 0.44,
+            "mixDirection": {"x": -0.862103, "y": -0.506733},
+            "mixMagnitude": 3.03908
+          }
+        },
+        {
+          "position": {"x": 3, "y": -1.13},
+          "radius": 0.4,
+          "property": {
+            "id": "tropicthunder",
+            "name": "Tropic Thunder",
+            "tier": 4,
+            "addictiveness": 0.803,
+            "valueChange": 0,
+            "valueMultiplier": 1,
+            "addBaseValueMultiple": 0.46,
+            "mixDirection": {"x": 0.935815, "y": -0.35249},
+            "mixMagnitude": 3.20576
+          }
+        },
+        {
+          "position": {"x": 0.96, "y": -2.96},
+          "radius": 0.4,
+          "property": {
+            "id": "antigravity",
+            "name": "Anti-gravity",
+            "tier": 5,
+            "addictiveness": 0.611,
+            "valueChange": 0,
+            "valueMultiplier": 1,
+            "addBaseValueMultiple": 0.54,
+            "mixDirection": {"x": 0.308505, "y": -0.951223},
+            "mixMagnitude": 3.11178
+          }
+        },
+        {
+          "position": {"x": -1.51, "y": 2.47},
+          "radius": 0.4,
+          "property": {
+            "id": "cyclopean",
+            "name": "Cyclopean",
+            "tier": 5,
+            "addictiveness": 0.1,
+            "valueChange": 0,
+            "valueMultiplier": 1,
+            "addBaseValueMultiple": 0.56,
+            "mixDirection": {"x": -0.52159, "y": 0.853196},
+            "mixMagnitude": 2.895
+          }
+        },
+        {
+          "position": {"x": -3.05, "y": 1.31},
+          "radius": 0.4,
+          "property": {
+            "id": "electrifying",
+            "name": "Electrifying",
+            "tier": 5,
+            "addictiveness": 0.235,
+            "valueChange": 0,
+            "valueMultiplier": 1,
+            "addBaseValueMultiple": 0.5,
+            "mixDirection": {"x": -0.918833, "y": 0.394646},
+            "mixMagnitude": 3.31943
+          }
+        },
+        {
+          "position": {"x": 2.38, "y": 2.6},
+          "radius": 0.4,
+          "property": {
+            "id": "explosive",
+            "name": "Explosive",
+            "tier": 5,
+            "addictiveness": 0,
+            "valueChange": 0,
+            "valueMultiplier": 1,
+            "addBaseValueMultiple": 0,
+            "mixDirection": {"x": 0.675211, "y": 0.737625},
+            "mixMagnitude": 3.52483
+          }
+        },
+        {
+          "position": {"x": -0.2, "y": 2.93},
+          "radius": 0.4,
+          "property": {
+            "id": "giraffying",
+            "name": "Long faced",
+            "tier": 5,
+            "addictiveness": 0.607,
+            "valueChange": 0,
+            "valueMultiplier": 1,
+            "addBaseValueMultiple": 0.52,
+            "mixDirection": {"x": -0.0681009, "y": 0.997678},
+            "mixMagnitude": 2.93682
+          }
+        },
+        {
+          "position": {"x": -3.26, "y": -0.89},
+          "radius": 0.4,
+          "property": {
+            "id": "shrinking",
+            "name": "Shrinking",
+            "tier": 5,
+            "addictiveness": 0.336,
+            "valueChange": 0,
+            "valueMultiplier": 1,
+            "addBaseValueMultiple": 0.6,
+            "mixDirection": {"x": -0.964696, "y": -0.263368},
+            "mixMagnitude": 3.3793
+          }
+        },
+        {
+          "position": {"x": 2.96, "y": 1.17},
+          "radius": 0.4,
+          "property": {
+            "id": "zombifying",
+            "name": "Zombifying",
+            "tier": 5,
+            "addictiveness": 0.598,
+            "valueChange": 0,
+            "valueMultiplier": 1,
+            "addBaseValueMultiple": 0.58,
+            "mixDirection": {"x": 0.929986, "y": 0.367596},
+            "mixMagnitude": 3.18284
+          }
+        }
+      ]
+    },
+    "meth": {},
+    "coke": {}
+  },
+  "validMixIngredients": [
+    {
+      "ingredient_name": "Cuke",
+      "property": {
+        "id": "energizing",
+        "name": "Energizing",
+        "tier": 2,
+        "addictiveness": 0.34,
+        "valueChange": 0,
+        "valueMultiplier": 1,
+        "addBaseValueMultiple": 0.22,
+        "mixDirection": {"x": -0.96631, "y": 0.257382},
+        "mixMagnitude": 2.21461
+      }
+    },
+    {
+      "ingredient_name": "Donut",
+      "property": {
+        "id": "caloriedense",
+        "name": "Calorie-Dense",
+        "tier": 2,
+        "addictiveness": 0.1,
+        "valueChange": 0,
+        "valueMultiplier": 1,
+        "addBaseValueMultiple": 0.28,
+        "mixDirection": {"x": 0.694483, "y": 0.719509},
+        "mixMagnitude": 1.59831
+      }
+    },
+    {
+      "ingredient_name": "Flu Medicine",
+      "property": {
+        "id": "sedating",
+        "name": "Sedating",
+        "tier": 2,
+        "addictiveness": 0,
+        "valueChange": 0,
+        "valueMultiplier": 1,
+        "addBaseValueMultiple": 0.26,
+        "mixDirection": {"x": 0.982339, "y": -0.187112},
+        "mixMagnitude": 2.13776
+      }
+    },
+    {
+      "ingredient_name": "Gasoline",
+      "property": {
+        "id": "toxic",
+        "name": "Toxic",
+        "tier": 2,
+        "addictiveness": 0,
+        "valueChange": 0,
+        "valueMultiplier": 1,
+        "addBaseValueMultiple": 0,
+        "mixDirection": {"x": 0.954557, "y": 0.298029},
+        "mixMagnitude": 2.31521
+      }
+    },
+    {
+      "ingredient_name": "Energy Drink",
+      "property": {
+        "id": "athletic",
+        "name": "Athletic",
+        "tier": 3,
+        "addictiveness": 0.607,
+        "valueChange": 0,
+        "valueMultiplier": 1,
+        "addBaseValueMultiple": 0.32,
+        "mixDirection": {"x": -0.967801, "y": -0.251715},
+        "mixMagnitude": 2.30419
+      }
+    },
+    {
+      "ingredient_name": "Mouth Wash",
+      "property": {
+        "id": "balding",
+        "name": "Balding",
+        "tier": 3,
+        "addictiveness": 0,
+        "valueChange": 0,
+        "valueMultiplier": 1,
+        "addBaseValueMultiple": 0.3,
+        "mixDirection": {"x": -0.0467715, "y": -0.998906},
+        "mixMagnitude": 2.99328
+      }
+    },
+    {
+      "ingredient_name": "Banana",
+      "property": {
+        "id": "gingeritis",
+        "name": "Gingeritis",
+        "tier": 2,
+        "addictiveness": 0,
+        "valueChange": 0,
+        "valueMultiplier": 1,
+        "addBaseValueMultiple": 0.2,
+        "mixDirection": {"x": -0.283827, "y": -0.958875},
+        "mixMagnitude": 2.08578
+      }
+    },
+    {
+      "ingredient_name": "Chili",
+      "property": {
+        "id": "spicy",
+        "name": "Spicy",
+        "tier": 3,
+        "addictiveness": 0.665,
+        "valueChange": 0,
+        "valueMultiplier": 1,
+        "addBaseValueMultiple": 0.38,
+        "mixDirection": {"x": 0.750938, "y": 0.660373},
+        "mixMagnitude": 2.65002
+      }
+    },
+    {
+      "ingredient_name": "Motor Oil",
+      "property": {
+        "id": "slippery",
+        "name": "Slippery",
+        "tier": 3,
+        "addictiveness": 0.309,
+        "valueChange": 0,
+        "valueMultiplier": 1,
+        "addBaseValueMultiple": 0.34,
+        "mixDirection": {"x": 0.775649, "y": -0.631165},
+        "mixMagnitude": 2.63006
+      }
+    },
+    {
+      "ingredient_name": "Iodine",
+      "property": {
+        "id": "jennerising",
+        "name": "Jennerising",
+        "tier": 4,
+        "addictiveness": 0.343,
+        "valueChange": 0,
+        "valueMultiplier": 1,
+        "addBaseValueMultiple": 0.42,
+        "mixDirection": {"x": -0.429359, "y": -0.903134},
+        "mixMagnitude": 3.37713
+      }
+    },
+    {
+      "ingredient_name": "Paracetamol",
+      "property": {
+        "id": "sneaky",
+        "name": "Sneaky",
+        "tier": 2,
+        "addictiveness": 0.327,
+        "valueChange": 0,
+        "valueMultiplier": 1,
+        "addBaseValueMultiple": 0.24,
+        "mixDirection": {"x": 0.364043, "y": -0.931382},
+        "mixMagnitude": 2.11514
+      }
+    },
+    {
+      "ingredient_name": "Viagra",
+      "property": {
+        "id": "tropicthunder",
+        "name": "Tropic Thunder",
+        "tier": 4,
+        "addictiveness": 0.803,
+        "valueChange": 0,
+        "valueMultiplier": 1,
+        "addBaseValueMultiple": 0.46,
+        "mixDirection": {"x": 0.935815, "y": -0.35249},
+        "mixMagnitude": 3.20576
+      }
+    },
+    {
+      "ingredient_name": "Horse Semen",
+      "property": {
+        "id": "giraffying",
+        "name": "Long faced",
+        "tier": 5,
+        "addictiveness": 0.607,
+        "valueChange": 0,
+        "valueMultiplier": 1,
+        "addBaseValueMultiple": 0.52,
+        "mixDirection": {"x": -0.0681009, "y": 0.997678},
+        "mixMagnitude": 2.93682
+      }
+    },
+    {
+      "ingredient_name": "Mega Bean",
+      "property": {
+        "id": "foggy",
+        "name": "Foggy",
+        "tier": 3,
+        "addictiveness": 0.1,
+        "valueChange": 0,
+        "valueMultiplier": 1,
+        "addBaseValueMultiple": 0.36,
+        "mixDirection": {"x": 0.223898, "y": 0.974613},
+        "mixMagnitude": 2.27783
+      }
+    },
+    {
+      "ingredient_name": "Addy",
+      "property": {
+        "id": "thoughtprovoking",
+        "name": "Thought-Provoking",
+        "tier": 4,
+        "addictiveness": 0.37,
+        "valueChange": 0,
+        "valueMultiplier": 1,
+        "addBaseValueMultiple": 0.44,
+        "mixDirection": {"x": -0.862103, "y": -0.506733},
+        "mixMagnitude": 3.03908
+      }
+    },
+    {
+      "ingredient_name": "Battery",
+      "property": {
+        "id": "brighteyed",
+        "name": "Bright-Eyed",
+        "tier": 4,
+        "addictiveness": 0.2,
+        "valueChange": 0,
+        "valueMultiplier": 1,
+        "addBaseValueMultiple": 0.4,
+        "mixDirection": {"x": 0.999913, "y": -0.0132002},
+        "mixMagnitude": 3.03026
+      }
+    }
+  ]
+}

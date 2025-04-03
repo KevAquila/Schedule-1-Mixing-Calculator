@@ -12,7 +12,7 @@
 #include <iomanip>
 #include "../Schedule I Mixer Sim/property_mixer_core.h"
 
-// Structure to track property transitions when mixing
+// PropertyTransition struct for animations
 struct PropertyTransition {
     Vector2 startPosition;
     Vector2 endPosition;
@@ -21,6 +21,7 @@ struct PropertyTransition {
     float animationTime;
     float totalAnimationTime;
 };
+
 
 // Structure for button
 struct Button {
@@ -87,12 +88,110 @@ public:
     }
     std::vector<Button> productButtons;
     std::string selectedProduct;
+    int hoveredIngredientIndex = -1;
 
     enum class Mode {
         Normal,
         PreviewMix,
         Help
     };
+
+
+    // Add new method to draw mix vectors
+    void drawMixVectors() {
+        if (hoveredIngredientIndex < 0 || hoveredIngredientIndex >= ingredientButtons.size()) {
+            return; // No ingredient hovered
+        }
+
+        // Get the property for the hovered ingredient
+        std::string ingredientId = ingredientButtons[hoveredIngredientIndex].id;
+        std::string propertyId = ingredientPropertyMapping[ingredientId];
+        Property* previewProperty = getPropertyByNameOrId(propertyId);
+
+        if (!previewProperty || !mixerMap) {
+            return;
+        }
+
+        const float centerX = windowWidth / 2.0f;
+        const float centerY = windowHeight / 2.0f;
+        const float scaleFactor = 80.0f; // Same scale as used elsewhere
+
+        // Draw the mix direction as a vector for each active property
+        for (const auto& propWithOrigin : currentProperties) {
+            Property* currentProp = propWithOrigin.property;
+            MixerMapEffect* effect = mixerMap->getEffect(currentProp);
+
+            if (effect) {
+                // Current property position
+                float startX = centerX + effect->position.x * scaleFactor;
+                float startY = centerY - effect->position.y * scaleFactor; // Y is inverted in SFML
+
+                // Calculate where it would move to
+                Vector2 endVector = effect->position +
+                    (previewProperty->mixDirection * previewProperty->mixMagnitude);
+
+                float endX = centerX + endVector.x * scaleFactor;
+                float endY = centerY - endVector.y * scaleFactor; // Y is inverted in SFML
+
+                // Draw the vector line
+                sf::Vertex line[] = {
+                    sf::Vertex(sf::Vector2f(startX, startY), sf::Color(255, 165, 0, 200)), // Orange start
+                    sf::Vertex(sf::Vector2f(endX, endY), sf::Color(255, 0, 0, 200))        // Red end
+                };
+                window->draw(line, 2, sf::Lines);
+
+                // Draw an arrow head
+                float angle = std::atan2(startY - endY, endX - startX); // Note: y coords are inverted
+                float arrowSize = 10.0f;
+
+                sf::Vertex arrowHead[] = {
+                    sf::Vertex(sf::Vector2f(endX, endY), sf::Color(255, 0, 0, 200)),
+                    sf::Vertex(sf::Vector2f(
+                        endX - arrowSize * std::cos(angle - 0.5f),
+                        endY + arrowSize * std::sin(angle - 0.5f)),  // Y inverted
+                        sf::Color(255, 0, 0, 200)),
+                    sf::Vertex(sf::Vector2f(endX, endY), sf::Color(255, 0, 0, 200)),
+                    sf::Vertex(sf::Vector2f(
+                        endX - arrowSize * std::cos(angle + 0.5f),
+                        endY + arrowSize * std::sin(angle + 0.5f)),  // Y inverted
+                        sf::Color(255, 0, 0, 200))
+                };
+                window->draw(arrowHead, 4, sf::Lines);
+
+                // Find what property, if any, would be at the end position
+                MixerMapEffect* resultEffect = mixerMap->getEffectAtPoint(endVector);
+                if (resultEffect) {
+                    // Draw a small circle to indicate the target property
+                    sf::CircleShape targetCircle(5.0f);
+                    targetCircle.setFillColor(sf::Color(255, 0, 0, 200));
+                    targetCircle.setPosition(endX - 5.0f, endY - 5.0f); // Center the circle
+                    window->draw(targetCircle);
+
+                    // Draw a small label with the target property name
+                    sf::Text targetLabel;
+                    targetLabel.setFont(font);
+                    targetLabel.setString(resultEffect->property->name);
+                    targetLabel.setCharacterSize(12);
+                    targetLabel.setFillColor(sf::Color::White);
+                    targetLabel.setOutlineColor(sf::Color::Black);
+                    targetLabel.setOutlineThickness(1.0f);
+                    targetLabel.setPosition(endX + 8.0f, endY - 6.0f);
+                    window->draw(targetLabel);
+                }
+            }
+        }
+
+        // Draw a note about the preview
+        sf::Text previewNote;
+        previewNote.setFont(font);
+        previewNote.setString("Preview: " + ingredientId + " effect on properties");
+        previewNote.setCharacterSize(14);
+        previewNote.setFillColor(sf::Color::Yellow);
+        previewNote.setOutlineColor(sf::Color::Black);
+        previewNote.setOutlineThickness(1.0f);
+        previewNote.setPosition(10, windowHeight - 40);
+        window->draw(previewNote);
+    }
 
     void createProductButtons() {
         float buttonHeight = 20.0f;
@@ -528,10 +627,17 @@ private:
     void handleMouseMove(int x, int y) {
         sf::Vector2f mousePos(static_cast<float>(x), static_cast<float>(y));
 
+
+
         // Check ingredient buttons
-        for (auto& button : ingredientButtons) {
-            button.isHovered = button.contains(mousePos);
-            button.updateColor();
+        hoveredIngredientIndex = -1;
+        for (size_t i = 0; i < ingredientButtons.size(); i++) {
+            ingredientButtons[i].isHovered = ingredientButtons[i].contains(mousePos);
+            ingredientButtons[i].updateColor();
+
+            if (ingredientButtons[i].isHovered) {
+                hoveredIngredientIndex = i;
+            }
         }
 
         // Check action buttons
@@ -691,6 +797,7 @@ private:
     }
 
     // Confirm mixing the previewed ingredient
+    // Update the confirmMix method in VisualPropertyMixer
     void confirmMix() {
         if (!previewNewProperty) {
             cancelPreview();
@@ -712,7 +819,7 @@ private:
         // Store pre-mixing properties to track transitions
         std::vector<Property*> beforeProperties = currentProps;
 
-        // Mix the properties
+        // Mix the properties with the updated calculator
         std::vector<Property*> result = PropertyMixCalculator::mixProperties(
             currentProps, previewNewProperty, DrugType::Marijuana);
 
@@ -727,7 +834,7 @@ private:
             // Check if this property was in the previous set
             bool wasInPrevious = false;
             for (const auto& prevProp : currentProperties) {
-                if (prevProp.property->id == resultProp->id) {
+                if (prevProp.property == resultProp) { // Direct pointer comparison
                     // This property was in the previous set, copy its ingredient list
                     newProp.ingredients = prevProp.ingredients;
                     wasInPrevious = true;
@@ -736,13 +843,13 @@ private:
             }
 
             // If it's the new property we just added
-            if (!wasInPrevious && resultProp->id == previewNewProperty->id) {
+            if (!wasInPrevious && resultProp == previewNewProperty) { // Direct pointer comparison
                 // This is just the ingredient we added
                 newProp.ingredients.push_back(ingredientName);
             }
             // If it's a new property created by mixing
             else if (!wasInPrevious) {
-                // This is a result of mixing, so we need to list all ingredients that led to it
+                // This is a result of mixing, so list all ingredients
                 for (const auto& prevIngredient : ingredientHistory) {
                     if (std::find(newProp.ingredients.begin(),
                         newProp.ingredients.end(),
@@ -756,28 +863,25 @@ private:
         }
 
         // Find property transitions for animation
-        for (size_t i = 0; i < beforeProperties.size(); i++) {
-            Property* beforeProp = beforeProperties[i];
-            bool foundInResult = false;
-
-            // Check if the property still exists in the result
-            for (Property* resultProp : result) {
-                if (resultProp->id == beforeProp->id) {
-                    foundInResult = true;
+        // For each property that was there before
+        for (auto* beforeProp : beforeProperties) {
+            // Check if it still exists in the result
+            bool stillExists = false;
+            for (auto* afterProp : result) {
+                if (beforeProp == afterProp) { // Direct pointer comparison
+                    stillExists = true;
                     break;
                 }
             }
 
             // If not found in result, it was transformed
-            if (!foundInResult) {
-                // Find what it transformed into
+            if (!stillExists) {
+                // Find the effect for this property
                 MixerMapEffect* beforeEffect = mixerMap->getEffect(beforeProp);
                 if (beforeEffect) {
                     // Calculate where it moved to
-                    Vector2 movePos(
-                        beforeEffect->position.x + previewNewProperty->mixDirection.x * previewNewProperty->mixMagnitude,
-                        beforeEffect->position.y + previewNewProperty->mixDirection.y * previewNewProperty->mixMagnitude
-                    );
+                    Vector2 movePos = beforeEffect->position +
+                        (previewNewProperty->mixDirection * previewNewProperty->mixMagnitude);
 
                     // Find the effect at that position
                     MixerMapEffect* afterEffect = mixerMap->getEffectAtPoint(movePos);
@@ -789,7 +893,7 @@ private:
                         transition.sourceProperty = beforeProp;
                         transition.resultProperty = afterEffect->property;
                         transition.animationTime = 0.0f;
-                        transition.totalAnimationTime = 1.5f; // Longer animation time for better visibility
+                        transition.totalAnimationTime = 1.5f;
 
                         activeTransitions.push_back(transition);
                     }
@@ -803,7 +907,6 @@ private:
         // Exit preview mode
         cancelPreview();
     }
-
     // Update any active property transitions
     void updateTransitions(float deltaTime) {
         // Update animation time for all transitions
@@ -835,6 +938,11 @@ private:
         // Draw mixing lines showing connections between properties
         if (showMixingLines) {
             drawMixingLines();
+        }
+
+        // Draw vector preview when hovering over ingredients
+        if (hoveredIngredientIndex >= 0 && mode == Mode::Normal) {
+            drawMixVectors();
         }
 
         // Draw the stats panel

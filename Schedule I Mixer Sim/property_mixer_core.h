@@ -100,19 +100,7 @@ struct Vector2 {
     Vector2() : x(0.0f), y(0.0f) {}
     Vector2(float x, float y) : x(x), y(y) {}
 
-    // Distance calculation
-    static float Distance(const Vector2& a, const Vector2& b) {
-        float dx = b.x - a.x;
-        float dy = b.y - a.y;
-        return std::sqrt(dx * dx + dy * dy);
-    }
-
-    // Magnitude calculation
-    float Magnitude() const {
-        return std::sqrt(x * x + y * y);
-    }
-
-    // Vector addition
+    // Vector addition operator
     Vector2 operator+(const Vector2& other) const {
         return Vector2(x + other.x, y + other.y);
     }
@@ -120,6 +108,18 @@ struct Vector2 {
     // Scalar multiplication
     Vector2 operator*(float scalar) const {
         return Vector2(x * scalar, y * scalar);
+    }
+
+    // Magnitude calculation
+    float Magnitude() const {
+        return std::sqrt(x * x + y * y);
+    }
+
+    // Static distance method
+    static float Distance(const Vector2& a, const Vector2& b) {
+        float dx = b.x - a.x;
+        float dy = b.y - a.y;
+        return std::sqrt(dx * dx + dy * dy);
     }
 };
 
@@ -170,8 +170,7 @@ public:
         std::cout << "  MixMagnitude: " << mixMagnitude << std::endl;
     }
 };
-
-// MixerMapEffect represents an effect at a specific point on the mixer map
+// MixerMapEffect with proper isPointInEffect method
 class MixerMapEffect {
 public:
     MixerMapEffect(const Vector2& position, float radius, Property* property) :
@@ -186,8 +185,7 @@ public:
         return Vector2::Distance(position, point) <= radius;
     }
 };
-
-// MixerMap represents the 2D map of effects for a drug type
+// Updated MixerMap class with proper GetEffect method
 class MixerMap {
 public:
     MixerMap() : mapRadius(4.0f) {}
@@ -204,7 +202,17 @@ public:
         effects.push_back(new MixerMapEffect(position, radius, property));
     }
 
-    // Find the effect at a given point (match the game's logic)
+    // Find the effect that contains a specific property (matches C# GetEffect)
+    MixerMapEffect* getEffect(Property* property) const {
+        for (auto* effect : effects) {
+            if (effect->property->id == property->id) {
+                return effect;
+            }
+        }
+        return nullptr;
+    }
+
+    // Find the effect at a given point
     MixerMapEffect* getEffectAtPoint(const Vector2& point) const {
         // First check if the point is within the map radius
         if (point.Magnitude() > mapRadius) {
@@ -220,17 +228,9 @@ public:
 
         return nullptr;
     }
-
-    // Find the effect that contains a specific property
-    MixerMapEffect* getEffect(Property* property) const {
-        for (auto* effect : effects) {
-            if (effect->property->id == property->id) {
-                return effect;
-            }
-        }
-        return nullptr;
-    }
 };
+
+
 
 // Recipe system components
 class StationRecipe {
@@ -351,7 +351,7 @@ class PropertyMixCalculator {
 public:
     static const int MAX_PROPERTIES = 8;
 
-    // Main function to mix properties
+    // Main function to mix properties - matches C# MixProperties exactly
     static std::vector<Property*> mixProperties(const std::vector<Property*>& existingProperties,
         Property* newProperty,
         DrugType drugType) {
@@ -365,15 +365,14 @@ public:
             return { recipe->result };
         }
 
-        // If no recipe, proceed with the mixing logic from the IDA pseudocode
+        // If no recipe, proceed with the mixing logic
         if (newProperty == nullptr) {
             std::cerr << "Error: newProperty is null" << std::endl;
             return existingProperties;
         }
 
-        // Calculate scaled mix direction components
-        float scaledX = newProperty->mixDirection.x * newProperty->mixMagnitude;
-        float scaledY = newProperty->mixDirection.y * newProperty->mixMagnitude;
+        // Calculate scaled mix direction - matches C# vector = mixDirection * mixMagnitude
+        Vector2 vector = newProperty->mixDirection * newProperty->mixMagnitude;
 
         // Get the mixer map for this drug type
         MixerMap* mixerMap = productManager.getMixerMap(drugType);
@@ -382,73 +381,58 @@ public:
             return existingProperties;
         }
 
-        // Create a list to track reactions
+        // Create a list to track reactions - matches C# list creation
         std::vector<Reaction> reactions;
 
-        // Process each existing property
-        for (auto* existingProp : existingProperties) {
-            // Find the corresponding effect in the mixer map
-            for (auto* effect : mixerMap->effects) {
-                if (effect->property->id == existingProp->id) {
-                    // Calculate the new position by adding the scaled mix direction
-                    Vector2 newPosition(
-                        effect->position.x + scaledX,
-                        effect->position.y + scaledY
-                    );
+        // Process each existing property - matches C# iteration
+        for (size_t i = 0; i < existingProperties.size(); i++) {
+            // Get the effect for this property - using pointer comparison
+            MixerMapEffect* effect = mixerMap->getEffect(existingProperties[i]);
 
-                    // Find the effect at the new position
-                    MixerMapEffect* resultEffect = mixerMap->getEffectAtPoint(newPosition);
+            // Calculate the new position - matches C# vector2 = position + vector
+            Vector2 vector2 = effect->position + vector;
 
-                    if (resultEffect != nullptr && resultEffect->property != nullptr) {
-                        // Add a reaction
-                        reactions.push_back(Reaction(existingProp, resultEffect->property));
-                    }
+            // Find the effect at the new position
+            MixerMapEffect* effectAtPoint = mixerMap->getEffectAtPoint(vector2);
 
-                    break;
-                }
+            // Get the property from the effect
+            Property* property = (effectAtPoint != nullptr) ? effectAtPoint->property : nullptr;
+
+            // Add reaction if property exists
+            if (property != nullptr) {
+                Reaction reaction;
+                reaction.existing = existingProperties[i];
+                reaction.output = property;
+                reactions.push_back(reaction);
             }
         }
 
-        // Create a new list starting with a copy of the existing properties
+        // Create a new list starting with existing properties - matches C# list copy
         std::vector<Property*> result(existingProperties);
 
-        // Apply reactions
+        // Apply reactions - matches C# foreach loop exactly
         for (const auto& reaction : reactions) {
-            // Find the existing property in the result list
-            for (size_t i = 0; i < result.size(); ++i) {
-                if (result[i]->id == reaction.existing->id) {
-                    // Replace it with the output property
-                    result[i] = reaction.output;
-                    break;
+            // Only update if output isn't already in the list
+            if (std::find(result.begin(), result.end(), reaction.output) == result.end()) {
+                // Find index of existing property
+                auto it = std::find(result.begin(), result.end(), reaction.existing);
+                if (it != result.end()) {
+                    // Replace at that index
+                    *it = reaction.output;
                 }
             }
         }
 
-        // Add the new property if it's not already in the list and we haven't reached the max
-        bool newPropertyExists = false;
-        for (const auto& prop : result) {
-            if (prop->id == newProperty->id) {
-                newPropertyExists = true;
-                break;
-            }
-        }
-
-        if (!newPropertyExists && result.size() < MAX_PROPERTIES) {
+        // Add the new property if not already in list and under max - matches C# check
+        if (std::find(result.begin(), result.end(), newProperty) == result.end() &&
+            result.size() < MAX_PROPERTIES) {
             result.push_back(newProperty);
         }
 
-        // Remove duplicates by creating a new list with distinct properties
+        // Make distinct list - matches C# Distinct() function
         std::vector<Property*> distinctResult;
-        for (const auto& prop : result) {
-            bool exists = false;
-            for (const auto& distinctProp : distinctResult) {
-                if (distinctProp->id == prop->id) {
-                    exists = true;
-                    break;
-                }
-            }
-
-            if (!exists) {
+        for (auto* prop : result) {
+            if (std::find(distinctResult.begin(), distinctResult.end(), prop) == distinctResult.end()) {
                 distinctResult.push_back(prop);
             }
         }
@@ -462,8 +446,14 @@ public:
         std::mt19937 g(seed);
         std::shuffle(list.begin(), list.end(), g);
     }
-};
 
+    // Inner Reaction class - matches C# inner class
+    class Reaction {
+    public:
+        Property* existing = nullptr;
+        Property* output = nullptr;
+    };
+};
 // Global properties map
 std::map<std::string, Property*> properties;
 

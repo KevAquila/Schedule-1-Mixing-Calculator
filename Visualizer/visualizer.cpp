@@ -10,6 +10,8 @@
 #include <queue>
 #include <sstream>
 #include <iomanip>
+#include <unordered_map>
+#include <fstream>
 #include "../Schedule I Mixer Sim/property_mixer_core.h"
 
 // PropertyTransition struct for animations
@@ -303,11 +305,22 @@ public:
             // Initialize ingredient mapping
             initializeIngredientMapping();
 
+            // Initialize bit mappings for path lookup
+            initializeBitMappings();
+
+            // Load path table
+            std::string pathFile = "paths_Cocaine_8.dat"; // Use the largest available file
+            pathTable = loadBinaryPathTable(pathFile);
+
             // Create ingredient buttons
             createIngredientButtons();
 
             // Create action buttons
             createActionButtons();
+
+            // Create property buttons
+            createPropertyButtons();
+
             // Create product buttons
             createProductButtons();
             // Initialize clock for animations
@@ -342,6 +355,412 @@ public:
             window->display();
         }
     }
+
+    // Add these to the VisualPropertyMixer class
+
+// Compact representation of ingredients and properties (matching the path generator)
+    using IngredientSet = uint16_t;
+    using PropertySet = uint64_t;
+
+    // Compact path entry structure
+    struct CompactPathEntry {
+        IngredientSet ingredients;  // Bit flags for ingredients
+        float baseValueBonus;
+        float addictiveness;
+        float valueMultiplier;
+
+        // Constructor for convenience
+        CompactPathEntry() : ingredients(0), baseValueBonus(0), addictiveness(0), valueMultiplier(1.0f) {}
+    };
+
+    // Main lookup table: property bitset -> paths
+    using PropertyPathTable = std::unordered_map<PropertySet, std::vector<CompactPathEntry>>;
+
+    // Mapping tables for bit conversion
+    std::unordered_map<std::string, uint16_t> ingredientBitMapping;
+    std::unordered_map<std::string, uint64_t> propertyBitMapping;
+    std::vector<std::string> ingredientByBitPosition;
+    std::vector<std::string> propertyByBitPosition;
+
+    // Path lookup table
+    PropertyPathTable pathTable;
+
+    // Currently selected desired properties
+    std::vector<Property*> desiredProperties;
+
+    // Currently suggested path
+    std::vector<std::string> suggestedPath;
+
+    // UI elements for property selection
+    std::vector<Button> propertyButtons;
+
+    // Add these methods
+// Initialize bit mappings
+    void initializeBitMappings() {
+        // Initialize ingredient bit mapping
+        uint16_t bit = 0;
+        for (const auto& pair : ingredientPropertyMapping) {
+            ingredientBitMapping[pair.first] = 1U << bit;
+            ingredientByBitPosition.push_back(pair.first);
+            bit++;
+        }
+
+        // Initialize property bit mapping
+        uint64_t propBit = 0;
+        for (const auto& pair : properties) {
+            propertyBitMapping[pair.second->id] = 1ULL << propBit;
+            propertyByBitPosition.push_back(pair.second->id);
+            propBit++;
+        }
+    }
+
+    // Load path table from binary format
+    PropertyPathTable loadBinaryPathTable(const std::string& filename) {
+        PropertyPathTable table;
+        std::ifstream file(filename, std::ios::binary);
+
+        if (!file) {
+            std::cerr << "Error opening file for reading: " << filename << std::endl;
+            return table;
+        }
+
+        // Read table size
+        uint32_t tableSize;
+        file.read(reinterpret_cast<char*>(&tableSize), sizeof(tableSize));
+
+        // Read each entry
+        for (uint32_t i = 0; i < tableSize; i++) {
+            // Read property bitset
+            PropertySet propBits;
+            file.read(reinterpret_cast<char*>(&propBits), sizeof(propBits));
+
+            // Read number of entries
+            uint8_t entryCount;
+            file.read(reinterpret_cast<char*>(&entryCount), sizeof(entryCount));
+
+            // Read each path entry
+            std::vector<CompactPathEntry> entries;
+            for (uint8_t j = 0; j < entryCount; j++) {
+                CompactPathEntry entry;
+                file.read(reinterpret_cast<char*>(&entry.ingredients), sizeof(entry.ingredients));
+                file.read(reinterpret_cast<char*>(&entry.baseValueBonus), sizeof(entry.baseValueBonus));
+                file.read(reinterpret_cast<char*>(&entry.addictiveness), sizeof(entry.addictiveness));
+                file.read(reinterpret_cast<char*>(&entry.valueMultiplier), sizeof(entry.valueMultiplier));
+
+                entries.push_back(entry);
+            }
+
+            table[propBits] = entries;
+        }
+
+        file.close();
+        std::cout << "Loaded " << table.size() << " property combinations" << std::endl;
+        return table;
+    }
+
+    // Convert properties to bitset
+    PropertySet propertiesToBitset(const std::vector<Property*>& props) {
+        PropertySet bits = 0;
+        for (auto* prop : props) {
+            auto it = propertyBitMapping.find(prop->id);
+            if (it != propertyBitMapping.end()) {
+                bits |= it->second;
+            }
+        }
+        return bits;
+    }
+
+    // Convert bitset to properties
+    std::vector<Property*> bitsetToProperties(PropertySet bits) {
+        std::vector<Property*> props;
+
+        for (int i = 0; i < propertyByBitPosition.size(); i++) {
+            if (bits & (1ULL << i)) {
+                Property* prop = getPropertyByNameOrId(propertyByBitPosition[i]);
+                if (prop) {
+                    props.push_back(prop);
+                }
+            }
+        }
+
+        return props;
+    }
+
+    // Convert ingredient bits to names
+    std::vector<std::string> bitToIngredientNames(IngredientSet ingredientBits) {
+        std::vector<std::string> names;
+
+        for (int i = 0; i < ingredientByBitPosition.size(); i++) {
+            if (ingredientBits & (1U << i)) {
+                names.push_back(ingredientByBitPosition[i]);
+            }
+        }
+
+        return names;
+    }
+
+    // Create property selection buttons
+    void createPropertyButtons() {
+        float startX = 400.f;
+        float startY = 10.f;
+        float buttonWidth = 110.0f;
+        float buttonHeight = 20.0f;
+        float padding = 5.0f;
+        float maxY = 600.0f;
+        int buttonsPerColumn = 5;
+
+        int index = 0;
+        for (const auto& pair : properties) {
+            Property* prop = pair.second;
+
+            int column = index / buttonsPerColumn;
+            int row = index % buttonsPerColumn;
+
+            Button button;
+            button.shape.setSize(sf::Vector2f(buttonWidth, buttonHeight));
+            button.shape.setPosition(
+                startX + column * (buttonWidth + padding),
+                startY + row * (buttonHeight + padding)
+            );
+
+            // Color by tier
+            button.defaultColor = tierColors[prop->tier];
+            button.hoverColor = sf::Color(
+                std::min(button.defaultColor.r + 40, 255),
+                std::min(button.defaultColor.g + 40, 255),
+                std::min(button.defaultColor.b + 40, 255)
+            );
+            button.activeColor = sf::Color(
+                std::min(button.defaultColor.r + 80, 255),
+                std::min(button.defaultColor.g + 80, 255),
+                std::min(button.defaultColor.b + 80, 255)
+            );
+
+            button.shape.setFillColor(button.defaultColor);
+            button.shape.setOutlineColor(sf::Color(100, 100, 150));
+            button.shape.setOutlineThickness(1.0f);
+
+            button.text.setFont(font);
+            button.text.setString(prop->name);
+            button.text.setCharacterSize(12);
+            button.text.setFillColor(sf::Color::White);
+            button.text.setPosition(
+                button.shape.getPosition().x + 5,
+                button.shape.getPosition().y + 2
+            );
+
+            button.id = prop->id;
+            button.isHovered = false;
+            button.isActive = false;
+
+            propertyButtons.push_back(button);
+            index++;
+        }
+    }
+
+    // Handle property button click
+    void handlePropertyButtonClick(int index) {
+        Property* prop = getPropertyByNameOrId(propertyButtons[index].id);
+
+        // Check if already selected
+        auto it = std::find(desiredProperties.begin(), desiredProperties.end(), prop);
+        if (it != desiredProperties.end()) {
+            // Remove from selection
+            desiredProperties.erase(it);
+            propertyButtons[index].isActive = false;
+        }
+        else {
+            // Add to selection
+            desiredProperties.push_back(prop);
+            propertyButtons[index].isActive = true;
+        }
+
+        // Update path suggestion
+        findPathForProperties();
+    }
+
+    // Find path for selected properties
+    void findPathForProperties() {
+        // Clear current suggestion
+        suggestedPath.clear();
+
+        if (desiredProperties.empty()) {
+            return;
+        }
+
+        // Convert desired properties to bitset
+        PropertySet desiredBits = propertiesToBitset(desiredProperties);
+
+        // Find matching paths
+        std::vector<std::pair<PropertySet, CompactPathEntry>> matches;
+
+        for (const auto& [propBits, entries] : pathTable) {
+            // Check if all desired bits are present
+            if ((propBits & desiredBits) == desiredBits) {
+                // Add the first entry for this property set
+                if (!entries.empty()) {
+                    matches.emplace_back(propBits, entries[0]);
+                }
+            }
+        }
+
+        // Sort by ingredient count (fewer = better)
+        std::sort(matches.begin(), matches.end(),
+            [this](const auto& a, const auto& b) {
+                int aCount = 0, bCount = 0;
+        for (int i = 0; i < 16; i++) {
+            if (a.second.ingredients & (1U << i)) aCount++;
+            if (b.second.ingredients & (1U << i)) bCount++;
+        }
+
+        if (aCount == bCount) {
+            return a.second.baseValueBonus > b.second.baseValueBonus;
+        }
+        return aCount < bCount;
+            });
+
+        // Get the best match
+        if (!matches.empty()) {
+            // Convert ingredient bits to names
+            suggestedPath = bitToIngredientNames(matches[0].second.ingredients);
+        }
+    }
+
+    // Draw property selection panel
+    void drawPropertySelectionPanel() {
+        // Draw panel background
+        sf::RectangleShape panel(sf::Vector2f(360.0f, 400.0f));
+        panel.setFillColor(sf::Color(20, 20, 30, 220));
+        panel.setOutlineColor(sf::Color(100, 100, 150));
+        panel.setOutlineThickness(1.0f);
+        panel.setPosition(10.0f, 420.0f);
+        //window->draw(panel);
+
+        // Draw title
+        sf::Text titleText;
+        titleText.setFont(font);
+        titleText.setString("Select Desired Properties");
+        titleText.setCharacterSize(18);
+        titleText.setFillColor(sf::Color::White);
+        titleText.setPosition(15.0f, 425.0f);
+        //window->draw(titleText);
+
+        // Draw property buttons
+        for (auto& button : propertyButtons) {
+            button.updateColor();
+            window->draw(button.shape);
+            window->draw(button.text);
+        }
+
+        // Draw selected properties count
+        sf::Text selectedText;
+        selectedText.setFont(font);
+        selectedText.setString("Selected: " + std::to_string(desiredProperties.size()));
+        selectedText.setCharacterSize(14);
+        selectedText.setFillColor(sf::Color::Yellow);
+        selectedText.setPosition(400.f, 140.f);
+        window->draw(selectedText);
+    }
+
+    // Draw path suggestion panel
+    void drawPathSuggestionPanel() {
+        if (desiredProperties.empty() || suggestedPath.empty()) {
+            return;
+        }
+
+        float panelWidth = 250.0f;
+        float panelHeight = 300.0f;
+        float startX = windowWidth - panelWidth - 10.0f;
+        float startY = 550.0f;
+
+        // Draw panel background
+        sf::RectangleShape panel(sf::Vector2f(panelWidth, panelHeight));
+        panel.setFillColor(sf::Color(20, 20, 30, 220));
+        panel.setOutlineColor(sf::Color(100, 100, 150));
+        panel.setOutlineThickness(1.0f);
+        panel.setPosition(startX, startY);
+        window->draw(panel);
+
+        // Draw title
+        sf::Text titleText;
+        titleText.setFont(font);
+        titleText.setString("Suggested Path");
+        titleText.setCharacterSize(18);
+        titleText.setFillColor(sf::Color::White);
+        titleText.setPosition(startX + 10.0f, startY + 10.0f);
+        window->draw(titleText);
+
+        // Draw desired properties
+        sf::Text desiredText;
+        desiredText.setFont(font);
+        desiredText.setString("Desired Properties:");
+        desiredText.setCharacterSize(14);
+        desiredText.setFillColor(sf::Color::Yellow);
+        desiredText.setPosition(startX + 10.0f, startY + 40.0f);
+        window->draw(desiredText);
+
+        float y = startY + 60.0f;
+        for (auto* prop : desiredProperties) {
+            sf::Text propText;
+            propText.setFont(font);
+            propText.setString("- " + prop->name);
+            propText.setCharacterSize(12);
+            propText.setFillColor(tierColors[prop->tier]);
+            propText.setPosition(startX + 20.0f, y);
+            window->draw(propText);
+
+            y += 20.0f;
+        }
+
+        // Draw suggested ingredients
+        sf::Text ingredientsText;
+        ingredientsText.setFont(font);
+        ingredientsText.setString("Suggested Ingredients:");
+        ingredientsText.setCharacterSize(14);
+        ingredientsText.setFillColor(sf::Color::Yellow);
+        ingredientsText.setPosition(startX + 10.0f, y + 10.0f);
+        window->draw(ingredientsText);
+
+        y += 30.0f;
+        for (const auto& ing : suggestedPath) {
+            sf::Text ingText;
+            ingText.setFont(font);
+            ingText.setString("- " + ing);
+            ingText.setCharacterSize(12);
+            ingText.setFillColor(sf::Color::White);
+            ingText.setPosition(startX + 20.0f, y);
+            window->draw(ingText);
+
+            y += 20.0f;
+        }
+
+        // Add a button to apply the suggested path
+        Button applyButton;
+        applyButton.shape.setSize(sf::Vector2f(220.0f, 30.0f));
+        applyButton.shape.setPosition(startX + 15.0f, startY + panelHeight - 40.0f);
+        applyButton.defaultColor = sf::Color(60, 180, 60);
+        applyButton.hoverColor = sf::Color(80, 220, 80);
+        applyButton.shape.setFillColor(
+            hoveredApplyPath ? applyButton.hoverColor : applyButton.defaultColor
+        );
+        applyButton.shape.setOutlineColor(sf::Color(100, 100, 150));
+        applyButton.shape.setOutlineThickness(1.0f);
+
+        sf::Text applyText;
+        applyText.setFont(font);
+        applyText.setString("Apply Suggested Path");
+        applyText.setCharacterSize(14);
+        applyText.setFillColor(sf::Color::White);
+        applyText.setPosition(
+            applyButton.shape.getPosition().x +
+            (applyButton.shape.getSize().x - applyText.getLocalBounds().width) / 2.0f,
+            applyButton.shape.getPosition().y + 7.0f
+        );
+
+        window->draw(applyButton.shape);
+        window->draw(applyText);
+    }
+
 
 private:
     bool isInitialized;
@@ -389,6 +808,22 @@ private:
     // Ingredient mapping
     std::map<std::string, std::string> ingredientPropertyMapping;
     std::map<std::string, std::string> propertyToIngredientMap;
+
+
+
+    // New variables for path finding
+    //PropertyPathTable pathTable;
+    //std::vector<Property*> desiredProperties;
+    //std::vector<std::string> suggestedPath;
+    //std::vector<Button> propertyButtons;
+    bool hoveredApplyPath = false;
+
+    // Bit mapping for property path lookup
+    //std::unordered_map<std::string, uint16_t> ingredientBitMapping;
+    //std::unordered_map<std::string, uint64_t> propertyBitMapping;
+    //std::vector<std::string> ingredientByBitPosition;
+    //std::vector<std::string> propertyByBitPosition;
+
 
     // Color mapping for different tiers
     std::map<int, sf::Color> tierColors = {
@@ -652,9 +1087,169 @@ private:
             button.updateColor();
         }
 
+
+        // Check property buttons (new)
+        for (auto& button : propertyButtons) {
+            button.isHovered = button.contains(mousePos);
+            button.updateColor();
+        }
+        // Check if hovering over apply path button
+        if (!suggestedPath.empty()) {
+            float panelWidth = 250.0f;
+            float panelHeight = 300.0f;
+            float startX = windowWidth - panelWidth - 10.0f;
+            float startY = 550.0f;
+
+            sf::FloatRect applyButtonRect(
+                startX + 15.0f,
+                startY + panelHeight - 40.0f,
+                220.0f,
+                30.0f
+            );
+
+            hoveredApplyPath = applyButtonRect.contains(mousePos);
+        }
+        else {
+            hoveredApplyPath = false;
+        }
+
         // Check property hover on the map
         checkPropertyHover(mousePos);
     }
+
+    void applyPath() {
+        if (suggestedPath.empty()) {
+            return;
+        }
+
+        // Clear current properties
+        currentProperties.clear();
+        ingredientHistory.clear();
+        activeTransitions.clear();
+
+        // Get initial properties from product if selected
+        if (!selectedProduct.empty()) {
+            auto productIt = products.find(selectedProduct);
+            if (productIt != products.end()) {
+                DrugProduct* product = productIt->second;
+
+                // Add each property to currentProperties
+                for (Property* prop : product->properties) {
+                    ProductProperty propWithOrigin;
+                    propWithOrigin.property = prop;
+                    propWithOrigin.ingredients.push_back(selectedProduct);
+                    currentProperties.push_back(propWithOrigin);
+                }
+            }
+        }
+
+        // Apply each ingredient in the path
+        for (const auto& ingredientName : suggestedPath) {
+            // Add to ingredient history
+            ingredientHistory.push_back(ingredientName);
+
+            // Get the property for this ingredient
+            std::string propertyId = ingredientPropertyMapping[ingredientName];
+            Property* newProperty = getPropertyByNameOrId(propertyId);
+
+            if (newProperty) {
+                // Extract just the properties without origin info for mixing
+                std::vector<Property*> currentProps;
+                for (const auto& propWithOrigin : currentProperties) {
+                    currentProps.push_back(propWithOrigin.property);
+                }
+
+                // Store pre-mixing properties to track transitions
+                std::vector<Property*> beforeProperties = currentProps;
+
+                // Mix the properties
+                std::vector<Property*> result = PropertyMixCalculator::mixProperties(
+                    currentProps, newProperty, DrugType::Marijuana);
+
+                // Create new properties with origin information
+                std::vector<ProductProperty> newProperties;
+
+                // For each property in the result, determine its origin
+                for (Property* resultProp : result) {
+                    ProductProperty newProp;
+                    newProp.property = resultProp;
+
+                    // Check if this property was in the previous set
+                    bool wasInPrevious = false;
+                    for (const auto& prevProp : currentProperties) {
+                        if (prevProp.property == resultProp) {
+                            // This property was in the previous set, copy its ingredient list
+                            newProp.ingredients = prevProp.ingredients;
+                            wasInPrevious = true;
+                            break;
+                        }
+                    }
+
+                    // If it's the new property we just added
+                    if (!wasInPrevious && resultProp == newProperty) {
+                        // This is just the ingredient we added
+                        newProp.ingredients.push_back(ingredientName);
+                    }
+                    // If it's a new property created by mixing
+                    else if (!wasInPrevious) {
+                        // This is a result of mixing, so list all ingredients
+                        for (const auto& prevIngredient : ingredientHistory) {
+                            if (std::find(newProp.ingredients.begin(),
+                                newProp.ingredients.end(),
+                                prevIngredient) == newProp.ingredients.end()) {
+                                newProp.ingredients.push_back(prevIngredient);
+                            }
+                        }
+                    }
+
+                    newProperties.push_back(newProp);
+                }
+
+                // Find property transitions for animation
+                for (auto* beforeProp : beforeProperties) {
+                    // Check if it still exists in the result
+                    bool stillExists = false;
+                    for (auto* afterProp : result) {
+                        if (beforeProp == afterProp) {
+                            stillExists = true;
+                            break;
+                        }
+                    }
+
+                    // If not found in result, it was transformed
+                    if (!stillExists) {
+                        // Find the effect for this property
+                        MixerMapEffect* beforeEffect = mixerMap->getEffect(beforeProp);
+                        if (beforeEffect) {
+                            // Calculate where it moved to
+                            Vector2 movePos = beforeEffect->position +
+                                (newProperty->mixDirection * newProperty->mixMagnitude);
+
+                            // Find the effect at that position
+                            MixerMapEffect* afterEffect = mixerMap->getEffectAtPoint(movePos);
+                            if (afterEffect) {
+                                // Add a transition animation
+                                PropertyTransition transition;
+                                transition.startPosition = beforeEffect->position;
+                                transition.endPosition = afterEffect->position;
+                                transition.sourceProperty = beforeProp;
+                                transition.resultProperty = afterEffect->property;
+                                transition.animationTime = 0.0f;
+                                transition.totalAnimationTime = 1.5f;
+
+                                activeTransitions.push_back(transition);
+                            }
+                        }
+                    }
+                }
+
+                // Update current properties
+                currentProperties = newProperties;
+            }
+        }
+    }
+
+
 
     // Check if mouse is hovering over a property on the map
     void checkPropertyHover(const sf::Vector2f& mousePos) {
@@ -704,6 +1299,21 @@ private:
                     return;
                 }
             }
+
+            // Check property buttons (new)
+            for (size_t i = 0; i < propertyButtons.size(); i++) {
+                if (propertyButtons[i].contains(mousePos)) {
+                    handlePropertyButtonClick(i);
+                    return;
+                }
+            }
+
+            // Check if apply path button was clicked
+            if (hoveredApplyPath && !suggestedPath.empty()) {
+                applyPath();
+                return;
+            }
+
 
             // Check action buttons
             for (const auto& button : actionButtons) {
@@ -952,6 +1562,12 @@ private:
         drawIngredientsPanel();
         // Draw products panel
         drawProductsPanel();
+
+        // Draw property selection panel (new)
+        drawPropertySelectionPanel();
+
+        // Draw path suggestion panel (new)
+        drawPathSuggestionPanel();
 
         // Draw action buttons
         drawActionButtons();

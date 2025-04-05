@@ -12,6 +12,8 @@
 #include <iomanip>
 #include <unordered_map>
 #include <fstream>
+#include <mutex>
+#include <future>
 #include "../Schedule I Mixer Sim/property_mixer_core.h"
 
 // PropertyTransition struct for animations
@@ -97,6 +99,60 @@ public:
         PreviewMix,
         Help
     };
+
+    void drawLoadingIndicator() {
+        // Create a small panel at the bottom center
+        float panelWidth = 300.0f;
+        float panelHeight = 40.0f;
+        float panelX = (windowWidth - panelWidth) / 2.0f;
+        float panelY = windowHeight - panelHeight - 20.0f; // 20px from bottom
+
+        sf::RectangleShape panel(sf::Vector2f(panelWidth, panelHeight));
+        panel.setFillColor(sf::Color(40, 40, 60, 220)); // Semi-transparent dark blue
+        panel.setOutlineColor(sf::Color(100, 100, 150));
+        panel.setOutlineThickness(1.0f);
+        panel.setPosition(panelX, panelY);
+        window->draw(panel);
+
+        // Create loading text
+        sf::Text loadingText;
+        loadingText.setFont(font);
+        loadingText.setString("Loading data for " + loadingTableProduct + "...");
+        loadingText.setCharacterSize(16);
+        loadingText.setFillColor(sf::Color::White);
+
+        // Center the text in the panel
+        sf::FloatRect textBounds = loadingText.getLocalBounds();
+        loadingText.setPosition(
+            panelX + (panelWidth - textBounds.width) / 2.0f,
+            panelY + (panelHeight - textBounds.height) / 2.0f - 5.0f
+        );
+
+        window->draw(loadingText);
+
+        // Add a small animated indicator (three dots that pulse)
+        float dotRadius = 4.0f;
+        float dotSpacing = 12.0f;
+        float dotsWidth = 3 * dotRadius * 2 + 2 * dotSpacing;
+        float dotsX = panelX + (panelWidth - dotsWidth) / 2.0f;
+        float dotsY = panelY + panelHeight - 12.0f;
+
+        // Use system time to animate
+        float currentTime = static_cast<float>(clock.getElapsedTime().asSeconds() * 3);
+
+        for (int i = 0; i < 3; i++) {
+            float pulse = 0.7f + 0.3f * std::sin(currentTime - i * 0.5f);
+
+            sf::CircleShape dot(dotRadius * pulse);
+            dot.setFillColor(sf::Color(200, 200, 255, 200 + 55 * pulse));
+            dot.setPosition(
+                dotsX + i * (dotRadius * 2 + dotSpacing) - dotRadius * pulse,
+                dotsY - dotRadius * pulse
+            );
+
+            window->draw(dot);
+        }
+    }
 
 
     // Add new method to draw mix vectors
@@ -268,6 +324,9 @@ public:
             }
         }
 
+        // Start loading the path table in background
+        loadPathTableAsync(productName);
+
         // Highlight the selected product button
         for (auto& button : productButtons) {
             button.isActive = (button.id == productName);
@@ -309,8 +368,8 @@ public:
             initializeBitMappings();
 
             // Load path table
-            std::string pathFile = "paths_Cocaine_8.dat"; // Use the largest available file
-            pathTable = loadBinaryPathTable(pathFile);
+            std::string pathFile = "paths_none.dat"; // Use a default file
+            loadPathTableAsync("none");
 
             // Create ingredient buttons
             createIngredientButtons();
@@ -342,6 +401,25 @@ public:
             // Handle events
             handleEvents();
 
+
+            // Check if async table loading has completed
+            if (isLoadingTable && tableLoadFuture.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+                // Get the loaded table
+                {
+                    std::lock_guard<std::mutex> lock(tableMutex);
+                    pathTable = tableLoadFuture.get();
+                }
+
+                // Reset loading state
+                isLoadingTable = false;
+
+                // Find paths if we have desired properties
+                if (!desiredProperties.empty()) {
+                    findPathForProperties();
+                }
+            }
+
+
             // Update transitions
             updateTransitions(deltaTime);
 
@@ -350,6 +428,12 @@ public:
 
             // Draw the interface
             drawInterface();
+
+
+            // Draw loading indicator if loading
+            if (isLoadingTable) {
+                drawLoadingIndicator();
+            }
 
             // Display the window
             window->display();
@@ -364,17 +448,21 @@ public:
 
     // Compact path entry structure
     struct CompactPathEntry {
-        IngredientSet ingredients;  // Bit flags for ingredients
+        std::vector<uint8_t> ingredientSequence;  // Sequence of ingredient indices
         float baseValueBonus;
         float addictiveness;
         float valueMultiplier;
 
         // Constructor for convenience
-        CompactPathEntry() : ingredients(0), baseValueBonus(0), addictiveness(0), valueMultiplier(1.0f) {}
+        CompactPathEntry() : baseValueBonus(0), addictiveness(0), valueMultiplier(1.0f) {}
     };
 
     // Main lookup table: property bitset -> paths
     using PropertyPathTable = std::unordered_map<PropertySet, std::vector<CompactPathEntry>>;
+    bool isLoadingTable = false;
+    std::string loadingTableProduct;
+    std::mutex tableMutex;
+    std::future<PropertyPathTable> tableLoadFuture;
 
     // Mapping tables for bit conversion
     std::unordered_map<std::string, uint16_t> ingredientBitMapping;
@@ -414,8 +502,42 @@ public:
         }
     }
 
+    void loadPathTableAsync(const std::string& productName) {
+        // Set loading state
+        isLoadingTable = true;
+        loadingTableProduct = productName;
+
+        // Start async task
+        tableLoadFuture = std::async(std::launch::async, [this, productName]() {
+            PropertyPathTable result;
+        std::string pathFile;
+
+        if (productName.empty()) {
+            pathFile = "paths_none.dat"; // Default - no starting properties
+        }
+        else {
+            pathFile = "paths_" + productName + ".dat"; // Product-specific
+        }
+
+        // Try to load the specified file
+        std::ifstream testFile(pathFile);
+        if (testFile.good()) {
+            testFile.close();
+            result = this->loadBinaryPathTable(pathFile);
+        }
+        else {
+            // If product-specific file doesn't exist, fall back to general table
+            std::cout << "No specific path table found for " << productName << ". Using default." << std::endl;
+            result = this->loadBinaryPathTable("paths_none.dat");
+        }
+
+        return result;
+            });
+    }
+
     // Load path table from binary format
     PropertyPathTable loadBinaryPathTable(const std::string& filename) {
+        // No global state modifications here to ensure thread safety
         PropertyPathTable table;
         std::ifstream file(filename, std::ios::binary);
 
@@ -442,7 +564,18 @@ public:
             std::vector<CompactPathEntry> entries;
             for (uint8_t j = 0; j < entryCount; j++) {
                 CompactPathEntry entry;
-                file.read(reinterpret_cast<char*>(&entry.ingredients), sizeof(entry.ingredients));
+
+                // Read sequence length
+                uint8_t seqLength;
+                file.read(reinterpret_cast<char*>(&seqLength), sizeof(seqLength));
+
+                // Read ingredient sequence
+                entry.ingredientSequence.resize(seqLength);
+                for (uint8_t k = 0; k < seqLength; k++) {
+                    file.read(reinterpret_cast<char*>(&entry.ingredientSequence[k]), sizeof(uint8_t));
+                }
+
+                // Read stats
                 file.read(reinterpret_cast<char*>(&entry.baseValueBonus), sizeof(entry.baseValueBonus));
                 file.read(reinterpret_cast<char*>(&entry.addictiveness), sizeof(entry.addictiveness));
                 file.read(reinterpret_cast<char*>(&entry.valueMultiplier), sizeof(entry.valueMultiplier));
@@ -457,7 +590,6 @@ public:
         std::cout << "Loaded " << table.size() << " property combinations" << std::endl;
         return table;
     }
-
     // Convert properties to bitset
     PropertySet propertiesToBitset(const std::vector<Property*>& props) {
         PropertySet bits = 0;
@@ -487,12 +619,12 @@ public:
     }
 
     // Convert ingredient bits to names
-    std::vector<std::string> bitToIngredientNames(IngredientSet ingredientBits) {
+    std::vector<std::string> sequenceToIngredientNames(const std::vector<uint8_t>& sequence) {
         std::vector<std::string> names;
 
-        for (int i = 0; i < ingredientByBitPosition.size(); i++) {
-            if (ingredientBits & (1U << i)) {
-                names.push_back(ingredientByBitPosition[i]);
+        for (uint8_t idx : sequence) {
+            if (idx < ingredientByBitPosition.size()) {
+                names.push_back(ingredientByBitPosition[idx]);
             }
         }
 
@@ -531,9 +663,9 @@ public:
                 std::min(button.defaultColor.b + 40, 255)
             );
             button.activeColor = sf::Color(
-                std::min(button.defaultColor.r + 80, 255),
-                std::min(button.defaultColor.g + 80, 255),
-                std::min(button.defaultColor.b + 80, 255)
+                std::min(button.defaultColor.r + 60, 0),
+                std::min(button.defaultColor.g + 60, 0),
+                std::min(button.defaultColor.b + 60, 0)
             );
 
             button.shape.setFillColor(button.defaultColor);
@@ -607,24 +739,42 @@ public:
         // Sort by ingredient count (fewer = better)
         std::sort(matches.begin(), matches.end(),
             [this](const auto& a, const auto& b) {
-                int aCount = 0, bCount = 0;
-        for (int i = 0; i < 16; i++) {
-            if (a.second.ingredients & (1U << i)) aCount++;
-            if (b.second.ingredients & (1U << i)) bCount++;
-        }
-
-        if (aCount == bCount) {
-            return a.second.baseValueBonus > b.second.baseValueBonus;
-        }
-        return aCount < bCount;
+                if (a.second.ingredientSequence.size() == b.second.ingredientSequence.size()) {
+                    return a.second.baseValueBonus > b.second.baseValueBonus;
+                }
+        return a.second.ingredientSequence.size() < b.second.ingredientSequence.size();
             });
 
         // Get the best match
         if (!matches.empty()) {
-            // Convert ingredient bits to names
-            suggestedPath = bitToIngredientNames(matches[0].second.ingredients);
+            // Convert ingredient sequence to names
+            suggestedPath = sequenceToIngredientNames(matches[0].second.ingredientSequence);
         }
     }
+
+    void loadPathTableForProduct(const std::string& productName) {
+        std::string pathFile;
+
+        if (productName.empty()) {
+            pathFile = "paths_none.dat"; // Default - no starting properties
+        }
+        else {
+            pathFile = "paths_" + productName + ".dat"; // Product-specific
+        }
+
+        // Try to load the specified file
+        std::ifstream testFile(pathFile);
+        if (testFile.good()) {
+            testFile.close();
+            pathTable = loadBinaryPathTable(pathFile);
+        }
+        else {
+            // If product-specific file doesn't exist, fall back to general table
+            std::cout << "No specific path table found for " << productName << ". Using default." << std::endl;
+            pathTable = loadBinaryPathTable("paths_none.dat");
+        }
+    }
+
 
     // Draw property selection panel
     void drawPropertySelectionPanel() {
@@ -668,10 +818,11 @@ public:
             return;
         }
 
-        float panelWidth = 250.0f;
-        float panelHeight = 300.0f;
-        float startX = windowWidth - panelWidth - 10.0f;
-        float startY = 550.0f;
+        float panelWidth = 280.f;
+        float panelHeight = 200.0f;
+        float startX = 330.f;
+        float startY = 700.0f;
+        
 
         // Draw panel background
         sf::RectangleShape panel(sf::Vector2f(panelWidth, panelHeight));
@@ -684,22 +835,22 @@ public:
         // Draw title
         sf::Text titleText;
         titleText.setFont(font);
-        titleText.setString("Suggested Path");
-        titleText.setCharacterSize(18);
+        titleText.setString("Property Finder");
+        titleText.setCharacterSize(16);
         titleText.setFillColor(sf::Color::White);
-        titleText.setPosition(startX + 10.0f, startY + 10.0f);
-        window->draw(titleText);
+        titleText.setPosition(startX + 10.0f, startY + 0);
+        //window->draw(titleText);
 
         // Draw desired properties
         sf::Text desiredText;
         desiredText.setFont(font);
-        desiredText.setString("Desired Properties:");
+        desiredText.setString("Desired Properties");
         desiredText.setCharacterSize(14);
         desiredText.setFillColor(sf::Color::Yellow);
-        desiredText.setPosition(startX + 10.0f, startY + 40.0f);
+        desiredText.setPosition(startX + 10.0f, startY + 10.f);
         window->draw(desiredText);
 
-        float y = startY + 60.0f;
+        float y = startY + 28.f;
         for (auto* prop : desiredProperties) {
             sf::Text propText;
             propText.setFont(font);
@@ -709,34 +860,35 @@ public:
             propText.setPosition(startX + 20.0f, y);
             window->draw(propText);
 
-            y += 20.0f;
+            y += 16.0f;
         }
-
+        y = startY;
         // Draw suggested ingredients
         sf::Text ingredientsText;
         ingredientsText.setFont(font);
-        ingredientsText.setString("Suggested Ingredients:");
+        ingredientsText.setString("Suggested Path");
         ingredientsText.setCharacterSize(14);
         ingredientsText.setFillColor(sf::Color::Yellow);
-        ingredientsText.setPosition(startX + 10.0f, y + 10.0f);
+        ingredientsText.setPosition(startX + 150.f, y + 10.0f);
         window->draw(ingredientsText);
 
         y += 30.0f;
+        int m = 1;
         for (const auto& ing : suggestedPath) {
             sf::Text ingText;
             ingText.setFont(font);
-            ingText.setString("- " + ing);
+            ingText.setString(std::to_string(m++) + ". " + ing);
             ingText.setCharacterSize(12);
             ingText.setFillColor(sf::Color::White);
-            ingText.setPosition(startX + 20.0f, y);
+            ingText.setPosition(startX + 155.f, y);
             window->draw(ingText);
 
-            y += 20.0f;
+            y += 16.0f;
         }
 
         // Add a button to apply the suggested path
         Button applyButton;
-        applyButton.shape.setSize(sf::Vector2f(220.0f, 30.0f));
+        applyButton.shape.setSize(sf::Vector2f(120.0f, 30.0f));
         applyButton.shape.setPosition(startX + 15.0f, startY + panelHeight - 40.0f);
         applyButton.defaultColor = sf::Color(60, 180, 60);
         applyButton.hoverColor = sf::Color(80, 220, 80);
@@ -748,7 +900,7 @@ public:
 
         sf::Text applyText;
         applyText.setFont(font);
-        applyText.setString("Apply Suggested Path");
+        applyText.setString("Apply Path");
         applyText.setCharacterSize(14);
         applyText.setFillColor(sf::Color::White);
         applyText.setPosition(
@@ -1093,17 +1245,23 @@ private:
             button.isHovered = button.contains(mousePos);
             button.updateColor();
         }
+
+
         // Check if hovering over apply path button
         if (!suggestedPath.empty()) {
-            float panelWidth = 250.0f;
-            float panelHeight = 300.0f;
-            float startX = windowWidth - panelWidth - 10.0f;
+            
+
+
+            float panelWidth = 150.f;
+            float panelHeight = 350.0f;
+            float startX = 330.f;
             float startY = 550.0f;
+
 
             sf::FloatRect applyButtonRect(
                 startX + 15.0f,
                 startY + panelHeight - 40.0f,
-                220.0f,
+                120.0f,
                 30.0f
             );
 
@@ -1115,6 +1273,47 @@ private:
 
         // Check property hover on the map
         checkPropertyHover(mousePos);
+    }
+
+    void findTransitions(const std::vector<Property*>& before,
+        const std::vector<Property*>& after,
+        Property* newProperty) {
+        for (auto* beforeProp : before) {
+            // Check if it still exists in the result
+            bool stillExists = false;
+            for (auto* afterProp : after) {
+                if (beforeProp == afterProp) {
+                    stillExists = true;
+                    break;
+                }
+            }
+
+            // If not found in result, it was transformed
+            if (!stillExists) {
+                // Find the effect for this property
+                MixerMapEffect* beforeEffect = mixerMap->getEffect(beforeProp);
+                if (beforeEffect) {
+                    // Calculate where it moved to
+                    Vector2 movePos = beforeEffect->position +
+                        (newProperty->mixDirection * newProperty->mixMagnitude);
+
+                    // Find the effect at that position
+                    MixerMapEffect* afterEffect = mixerMap->getEffectAtPoint(movePos);
+                    if (afterEffect) {
+                        // Add a transition animation
+                        PropertyTransition transition;
+                        transition.startPosition = beforeEffect->position;
+                        transition.endPosition = afterEffect->position;
+                        transition.sourceProperty = beforeProp;
+                        transition.resultProperty = afterEffect->property;
+                        transition.animationTime = 0.0f;
+                        transition.totalAnimationTime = 1.5f;
+
+                        activeTransitions.push_back(transition);
+                    }
+                }
+            }
+        }
     }
 
     void applyPath() {
@@ -1206,42 +1405,7 @@ private:
                 }
 
                 // Find property transitions for animation
-                for (auto* beforeProp : beforeProperties) {
-                    // Check if it still exists in the result
-                    bool stillExists = false;
-                    for (auto* afterProp : result) {
-                        if (beforeProp == afterProp) {
-                            stillExists = true;
-                            break;
-                        }
-                    }
-
-                    // If not found in result, it was transformed
-                    if (!stillExists) {
-                        // Find the effect for this property
-                        MixerMapEffect* beforeEffect = mixerMap->getEffect(beforeProp);
-                        if (beforeEffect) {
-                            // Calculate where it moved to
-                            Vector2 movePos = beforeEffect->position +
-                                (newProperty->mixDirection * newProperty->mixMagnitude);
-
-                            // Find the effect at that position
-                            MixerMapEffect* afterEffect = mixerMap->getEffectAtPoint(movePos);
-                            if (afterEffect) {
-                                // Add a transition animation
-                                PropertyTransition transition;
-                                transition.startPosition = beforeEffect->position;
-                                transition.endPosition = afterEffect->position;
-                                transition.sourceProperty = beforeProp;
-                                transition.resultProperty = afterEffect->property;
-                                transition.animationTime = 0.0f;
-                                transition.totalAnimationTime = 1.5f;
-
-                                activeTransitions.push_back(transition);
-                            }
-                        }
-                    }
-                }
+                findTransitions(beforeProperties, result, newProperty);
 
                 // Update current properties
                 currentProperties = newProperties;

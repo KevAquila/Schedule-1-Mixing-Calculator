@@ -14,6 +14,8 @@
 #include <bitset>
 #include <fstream>
 #include <unordered_map>
+#include <stack>
+#include <functional>
 
 // Define ingredient mapping
 std::map<std::string, std::string> ingredientPropertyMapping = {
@@ -56,6 +58,12 @@ using PropertyPathTable = std::unordered_map<PropertySet, std::vector<CompactPat
 std::unordered_map<std::string, uint64_t> propertyBitMapping;
 std::vector<std::string> ingredientByBitPosition;
 std::vector<std::string> propertyByBitPosition;
+
+// Progress tracking
+std::atomic<size_t> permutationsDone = 0;
+std::mutex resultMutex;
+
+// =================== BIT MAPPING FUNCTIONS ===================
 
 // Initialize bit mappings
 void initializeBitMappings() {
@@ -112,39 +120,7 @@ std::vector<Property*> bitsetToProperties(PropertySet bits) {
     return props;
 }
 
-// Count bits set in a number (population count)
-int countBits(uint64_t bits) {
-    int count = 0;
-    while (bits != 0) {
-        count += bits & 1;
-        bits >>= 1;
-    }
-    return count;
-}
-
-// Generate combinations of k items from n
-std::vector<std::vector<uint8_t>> generateCombinations(int k, int n) {
-    std::vector<std::vector<uint8_t>> combinations;
-
-    std::vector<bool> bitmask(n, false);
-    std::fill(bitmask.begin(), bitmask.begin() + k, true);
-
-    do {
-        std::vector<uint8_t> combo;
-        for (int i = 0; i < n; i++) {
-            if (bitmask[i]) {
-                combo.push_back(i);
-            }
-        }
-        combinations.push_back(combo);
-    } while (std::prev_permutation(bitmask.begin(), bitmask.end()));
-
-    return combinations;
-}
-
-// Progress tracking
-std::atomic<size_t> permutationsDone = 0;
-std::mutex resultMutex;
+// =================== PROGRESS DISPLAY FUNCTIONS ===================
 
 void displayProgressBar(size_t totalPermutations) {
     const int barWidth = 50;
@@ -188,125 +164,7 @@ void displayProgressBar(size_t totalPermutations) {
     std::cout << "  (" << permutationsDone.load() << "/" << totalPermutations << ")" << std::endl;
 }
 
-// Process a chunk of combinations
-PropertyPathTable processWorkerChunk(const std::vector<std::vector<uint8_t>>& combinations,
-    const std::vector<Property*>& initialProperties) {
-    PropertyPathTable pathTable;
-
-    // For each combination, generate all permutations
-    for (const auto& combo : combinations) {
-        std::vector<uint8_t> perm = combo;
-
-        // Process all permutations of this combination
-        do {
-            // Start with initial properties
-            std::vector<Property*> props = initialProperties;
-
-            // Apply each ingredient in sequence
-            for (uint8_t idx : perm) {
-                std::string ingName = ingredientByBitPosition[idx];
-                Property* newProp = getPropertyByNameOrId(ingredientPropertyMapping[ingName]);
-                if (newProp) {
-                    props = PropertyMixCalculator::mixProperties(props, newProp, DrugType::Marijuana);
-                }
-            }
-
-            // Calculate statistics
-            float baseValueSum = 0.0f;
-            float addictiveness = 0.0f;
-            float valueMultiplier = 1.0f;
-
-            for (auto* p : props) {
-                baseValueSum += p->addBaseValueMultiple;
-                addictiveness += p->addictiveness;
-                valueMultiplier *= p->valueMultiplier;
-            }
-
-            // Create entry
-            PropertySet propBits = propertiesToBitset(props);
-            CompactPathEntry entry;
-            entry.ingredientSequence = perm;  // Store actual sequence
-            entry.baseValueBonus = baseValueSum;
-            entry.addictiveness = addictiveness;
-            entry.valueMultiplier = valueMultiplier;
-
-            // Add to result
-            pathTable[propBits].push_back(entry);
-            permutationsDone++;
-
-        } while (std::next_permutation(perm.begin(), perm.end()));
-    }
-
-    // Filter and sort entries
-    for (auto& [propBits, entries] : pathTable) {
-        // Sort by sequence length (fewer = better)
-        std::sort(entries.begin(), entries.end(),
-            [](const CompactPathEntry& a, const CompactPathEntry& b) {
-                if (a.ingredientSequence.size() == b.ingredientSequence.size()) {
-                    return a.baseValueBonus > b.baseValueBonus;
-                }
-        return a.ingredientSequence.size() < b.ingredientSequence.size();
-            });
-
-        // Keep only the shortest paths
-        size_t shortestLength = entries[0].ingredientSequence.size();
-        entries.erase(
-            std::remove_if(entries.begin(), entries.end(),
-                [shortestLength](const CompactPathEntry& entry) {
-                    return entry.ingredientSequence.size() > shortestLength;
-                }),
-            entries.end()
-                    );
-
-        // Limit to top 5
-        if (entries.size() > 5) {
-            entries.resize(5);
-        }
-    }
-
-    return pathTable;
-}
-
-// Merge two path tables
-void mergePathTables(PropertyPathTable& target, const PropertyPathTable& source) {
-    for (const auto& [propBits, entries] : source) {
-        // If property set not in target, add all entries
-        if (target.find(propBits) == target.end()) {
-            target[propBits] = entries;
-        }
-        else {
-            // Otherwise, merge entries
-            auto& targetEntries = target[propBits];
-
-            // Add source entries
-            targetEntries.insert(targetEntries.end(), entries.begin(), entries.end());
-
-            // Re-sort combined entries
-            std::sort(targetEntries.begin(), targetEntries.end(),
-                [](const CompactPathEntry& a, const CompactPathEntry& b) {
-                    if (a.ingredientSequence.size() == b.ingredientSequence.size()) {
-                        return a.baseValueBonus > b.baseValueBonus;
-                    }
-            return a.ingredientSequence.size() < b.ingredientSequence.size();
-                });
-
-            // Keep only shortest paths
-            size_t shortestLength = targetEntries[0].ingredientSequence.size();
-            targetEntries.erase(
-                std::remove_if(targetEntries.begin(), targetEntries.end(),
-                    [shortestLength](const CompactPathEntry& entry) {
-                        return entry.ingredientSequence.size() > shortestLength;
-                    }),
-                targetEntries.end()
-                        );
-
-            // Limit to top 5
-            if (targetEntries.size() > 5) {
-                targetEntries.resize(5);
-            }
-        }
-    }
-}
+// =================== FILE I/O FUNCTIONS ===================
 
 // Save path table in binary format
 void saveBinaryPathTable(const PropertyPathTable& table, const std::string& filename) {
@@ -351,102 +209,7 @@ void saveBinaryPathTable(const PropertyPathTable& table, const std::string& file
     file.close();
     std::cout << "Saved " << tableSize << " property combinations to " << filename << std::endl;
 }
-void mergeResultsInParallel(PropertyPathTable& globalTable, std::vector<PropertyPathTable>& threadResults, int numThreads);
-// Hybrid approach for path generation with parallel merging
-PropertyPathTable findAllPathsHybrid(int maxIngredientCount, int numThreads,
-    const std::string& productName = "") {
 
-    PropertyPathTable globalPathTable;
-    std::vector<Property*> initialProperties;
-
-    // Get initial properties from product if provided
-    if (!productName.empty()) {
-        auto it = products.find(productName);
-        if (it != products.end()) {
-            initialProperties = it->second->properties;
-            std::cout << "Starting with " << productName << " properties:" << std::endl;
-            for (auto* prop : initialProperties) {
-                std::cout << " - " << prop->name << std::endl;
-            }
-        }
-    }
-
-    // Process one ingredient count at a time
-    for (int ingredientCount = 1; ingredientCount <= maxIngredientCount; ingredientCount++) {
-        std::cout << "\nProcessing " << ingredientCount << " ingredient combinations..." << std::endl;
-
-        // Generate all combinations with exactly 'ingredientCount' ingredients
-        std::vector<std::vector<uint8_t>> combinations = generateCombinations(ingredientCount, ingredientByBitPosition.size());
-
-        std::cout << "Generated " << combinations.size() << " combinations with "
-            << ingredientCount << " ingredients." << std::endl;
-
-        // Calculate total permutations for progress tracking
-        size_t totalPermutations = 0;
-        for (size_t i = 0; i < combinations.size(); i++) {
-            // Number of permutations for this combination is k!
-            size_t permCount = 1;
-            for (int j = 2; j <= ingredientCount; j++) {
-                permCount *= j;
-            }
-            totalPermutations += permCount;
-        }
-
-        permutationsDone = 0;
-
-        std::cout << "Processing " << totalPermutations << " permutations..." << std::endl;
-
-        // Split work among threads
-        size_t batchSize = (combinations.size() + numThreads - 1) / numThreads;
-        std::vector<std::future<PropertyPathTable>> futures;
-
-        // Start progress thread
-        std::thread progressThread(displayProgressBar, totalPermutations);
-
-        // Launch worker threads
-        for (int t = 0; t < numThreads; t++) {
-            size_t start = t * batchSize;
-            if (start >= combinations.size()) break;
-
-            size_t end = std::min(start + batchSize, combinations.size());
-            std::vector<std::vector<uint8_t>> chunk(combinations.begin() + start, combinations.begin() + end);
-
-            futures.push_back(std::async(std::launch::async,
-                [chunk, initialProperties]() {
-                    return processWorkerChunk(chunk, initialProperties);
-                }
-            ));
-        }
-
-        // Collect results into a vector
-        std::vector<PropertyPathTable> threadResults;
-        for (auto& f : futures) {
-            threadResults.push_back(f.get());
-        }
-
-        // Wait for progress thread
-        progressThread.join();
-
-        // Merge results in parallel
-        mergeResultsInParallel(globalPathTable, threadResults, numThreads);
-
-        // Clear combinations to free memory
-        std::vector<std::vector<uint8_t>> emptyCombos;
-        combinations.swap(emptyCombos);
-
-        // Save intermediate results
-        std::string intermediateFile = "paths_" +
-            (productName.empty() ? "none" : productName) +
-            "_" + std::to_string(ingredientCount) + ".dat";
-
-        saveBinaryPathTable(globalPathTable, intermediateFile);
-
-        std::cout << "Completed " << ingredientCount << " ingredient combinations." << std::endl;
-        std::cout << "Current unique property combinations: " << globalPathTable.size() << std::endl;
-    }
-
-    return globalPathTable;
-}
 // Load path table from binary format
 PropertyPathTable loadBinaryPathTable(const std::string& filename) {
     PropertyPathTable table;
@@ -502,9 +265,641 @@ PropertyPathTable loadBinaryPathTable(const std::string& filename) {
     return table;
 }
 
+// =================== PROCESSING FUNCTIONS ===================
+
+// Process a batch of sequences for a specific ingredient count
+void processSequenceBatch(
+    PropertyPathTable& pathTable,
+    const std::vector<Property*>& initialProperties,
+    size_t startIngredient,
+    size_t endIngredient,
+    int ingredientCount,
+    std::atomic<size_t>& sequencesProcessed,
+    int threadId
+) {
+    // For each starting ingredient
+    for (size_t firstIngredient = startIngredient; firstIngredient < endIngredient; firstIngredient++) {
+        // Get property for the first ingredient
+        std::string firstIngName = ingredientByBitPosition[firstIngredient];
+        Property* firstProp = getPropertyByNameOrId(ingredientPropertyMapping[firstIngName]);
+
+        if (!firstProp) continue;
+
+        // Apply first ingredient
+        std::vector<Property*> firstProps = PropertyMixCalculator::mixProperties(
+            initialProperties, firstProp, DrugType::Marijuana);
+
+        // Current sequence starts with this ingredient
+        std::vector<uint8_t> currentSeq = { static_cast<uint8_t>(firstIngredient) };
+
+        // Stack-based DFS to avoid recursion and stack overflow
+        struct StackState {
+            std::vector<uint8_t> sequence;
+            std::vector<Property*> properties;
+            size_t depth;
+            size_t nextIngredient;
+
+            StackState(const std::vector<uint8_t>& seq, const std::vector<Property*>& props,
+                size_t d, size_t next)
+                : sequence(seq), properties(props), depth(d), nextIngredient(next) {}
+        };
+
+        std::stack<StackState> dfsStack;
+        dfsStack.push(StackState(currentSeq, firstProps, 1, 0));
+
+        // For infrequent logging
+        auto lastLogTime = std::chrono::steady_clock::now();
+        const auto logInterval = std::chrono::seconds(5);
+
+        while (!dfsStack.empty()) {
+            StackState current = dfsStack.top();
+            dfsStack.pop();
+
+            // Log progress much less frequently - only every 5 seconds
+            auto now = std::chrono::steady_clock::now();
+            if (now - lastLogTime > logInterval) {
+                // Use a mutex to prevent interleaved console output
+                static std::mutex logMutex;
+                {
+                    std::lock_guard<std::mutex> lock(logMutex);
+                    std::cout << "\rThread " << threadId << ": Ingredient "
+                        << firstIngredient << "/" << (endIngredient - 1)
+                        << ", sequences: " << sequencesProcessed.load() << std::flush;
+                }
+                lastLogTime = now;
+            }
+
+            // If we've reached target depth, add to results
+            if (current.depth == ingredientCount) {
+                // Calculate statistics
+                float baseValueSum = 0.0f;
+                float addictiveness = 0.0f;
+                float valueMultiplier = 1.0f;
+
+                for (auto* p : current.properties) {
+                    baseValueSum += p->addBaseValueMultiple;
+                    addictiveness += p->addictiveness;
+                    valueMultiplier *= p->valueMultiplier;
+                }
+
+                // Create entry
+                PropertySet propBits = propertiesToBitset(current.properties);
+                CompactPathEntry entry;
+                entry.ingredientSequence = current.sequence;
+                entry.baseValueBonus = baseValueSum;
+                entry.addictiveness = addictiveness;
+                entry.valueMultiplier = valueMultiplier;
+
+                // Add to results - need lock here
+                {
+                    std::lock_guard<std::mutex> lock(resultMutex);
+                    pathTable[propBits].push_back(entry);
+                }
+
+                sequencesProcessed++;
+                continue;
+            }
+
+            // Otherwise, try each ingredient for the next position
+            for (size_t i = 0; i < ingredientByBitPosition.size(); i++) {
+                std::string ingName = ingredientByBitPosition[i];
+                Property* prop = getPropertyByNameOrId(ingredientPropertyMapping[ingName]);
+
+                if (prop) {
+                    // Apply this ingredient
+                    std::vector<Property*> newProps = PropertyMixCalculator::mixProperties(
+                        current.properties, prop, DrugType::Marijuana);
+
+                    // Add to sequence
+                    std::vector<uint8_t> newSeq = current.sequence;
+                    newSeq.push_back(i);
+
+                    // Push to stack
+                    dfsStack.push(StackState(newSeq, newProps, current.depth + 1, 0));
+                }
+            }
+        }
+    }
+}
+
+// Filter and sort path table entries - can be called after merging
+void filterAndSortPathTable(PropertyPathTable& table) {
+    for (auto& [propBits, entries] : table) {
+        if (entries.empty()) continue;
+
+        // Sort by sequence length (fewer = better)
+        std::sort(entries.begin(), entries.end(),
+            [](const CompactPathEntry& a, const CompactPathEntry& b) {
+                if (a.ingredientSequence.size() == b.ingredientSequence.size()) {
+                    return a.baseValueBonus > b.baseValueBonus;
+                }
+        return a.ingredientSequence.size() < b.ingredientSequence.size();
+            });
+
+        // Keep only shortest paths
+        size_t shortestLength = entries[0].ingredientSequence.size();
+        entries.erase(
+            std::remove_if(entries.begin(), entries.end(),
+                [shortestLength](const CompactPathEntry& entry) {
+                    return entry.ingredientSequence.size() > shortestLength;
+                }),
+            entries.end()
+                    );
+
+        // Limit to top 5
+        if (entries.size() > 5) {
+            entries.resize(5);
+        }
+    }
+}
+
+// Process single ingredient combinations
+void processSingleIngredientCombinations(
+    PropertyPathTable& pathTable,
+    const std::vector<Property*>& initialProperties
+) {
+    size_t totalIngredients = ingredientByBitPosition.size();
+
+    // Process all single-ingredient combinations directly
+    for (size_t i = 0; i < totalIngredients; i++) {
+        std::string ingName = ingredientByBitPosition[i];
+        Property* prop = getPropertyByNameOrId(ingredientPropertyMapping[ingName]);
+
+        if (prop) {
+            std::vector<Property*> mixedProps = PropertyMixCalculator::mixProperties(
+                initialProperties, prop, DrugType::Marijuana);
+
+            // Calculate statistics
+            float baseValueSum = 0.0f;
+            float addictiveness = 0.0f;
+            float valueMultiplier = 1.0f;
+
+            for (auto* p : mixedProps) {
+                baseValueSum += p->addBaseValueMultiple;
+                addictiveness += p->addictiveness;
+                valueMultiplier *= p->valueMultiplier;
+            }
+
+            // Create entry
+            PropertySet propBits = propertiesToBitset(mixedProps);
+            CompactPathEntry entry;
+            entry.ingredientSequence.push_back(i);
+            entry.baseValueBonus = baseValueSum;
+            entry.addictiveness = addictiveness;
+            entry.valueMultiplier = valueMultiplier;
+
+            // Add to table
+            pathTable[propBits].push_back(entry);
+        }
+    }
+}
+
+// More efficient path table merging
+void mergePathTables(PropertyPathTable& target, PropertyPathTable& source) {
+    // Reserve capacity in target to avoid excessive reallocation
+    if (target.size() < target.size() + source.size()) {
+        target.reserve(target.size() + source.size());
+    }
+
+    // Process source entries in batches to avoid long-running operations
+    const size_t BATCH_SIZE = 1000;
+    size_t entriesProcessed = 0;
+    size_t totalEntries = source.size();
+
+    // Create a vector of keys to process to avoid iterator invalidation
+    std::vector<PropertySet> sourceKeys;
+    sourceKeys.reserve(source.size());
+    for (const auto& [propBits, _] : source) {
+        sourceKeys.push_back(propBits);
+    }
+
+    // Display merge progress
+    auto startTime = std::chrono::steady_clock::now();
+
+    // Process keys in batches
+    for (size_t i = 0; i < sourceKeys.size(); i++) {
+        PropertySet propBits = sourceKeys[i];
+        auto& entries = source[propBits];
+
+        // Move entries to target
+        auto targetIt = target.find(propBits);
+        if (targetIt == target.end()) {
+            // Property set not in target, insert directly
+            target.emplace(propBits, std::move(entries));
+        }
+        else {
+            // Already exists in target, append entries
+            auto& targetEntries = targetIt->second;
+            targetEntries.insert(
+                targetEntries.end(),
+                std::make_move_iterator(entries.begin()),
+                std::make_move_iterator(entries.end())
+            );
+        }
+
+        // Empty the source entries to free memory immediately
+        std::vector<CompactPathEntry>().swap(entries);
+
+        // Update progress every batch
+        entriesProcessed++;
+        if (entriesProcessed % BATCH_SIZE == 0 || entriesProcessed == totalEntries) {
+            auto now = std::chrono::steady_clock::now();
+            auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - startTime).count();
+            if (elapsed == 0) elapsed = 1;
+
+            float progress = static_cast<float>(entriesProcessed) / totalEntries;
+            float entriesPerSecond = static_cast<float>(entriesProcessed) / elapsed;
+
+            int eta = 0;
+            if (progress > 0.01f) {
+                eta = static_cast<int>((1.0f - progress) * elapsed / progress);
+            }
+
+            std::cout << "\rMerge: " << std::fixed << std::setprecision(1)
+                << (progress * 100.0f) << "% ("
+                << entriesProcessed << "/" << totalEntries
+                << "), " << static_cast<int>(entriesPerSecond) << " entries/s"
+                << ", ETA: " << eta << "s" << std::flush;
+        }
+    }
+
+    // Clear the source table completely to free memory
+    PropertyPathTable empty;
+    source.swap(empty);
+
+    std::cout << std::endl;
+}
+
+// =================== MAIN PROCESSING FUNCTION ===================
+
+// Process ingredients recursively, one first-ingredient at a time
+PropertyPathTable processIngredientBatch(
+    int firstIngredient,
+    int targetDepth,
+    const std::vector<Property*>& initialProperties,
+    int numThreads
+) {
+    PropertyPathTable batchResult;
+    std::string firstIngName = ingredientByBitPosition[firstIngredient];
+    Property* firstProp = getPropertyByNameOrId(ingredientPropertyMapping[firstIngName]);
+
+    if (!firstProp) {
+        return batchResult; // Empty result if ingredient not found
+    }
+
+    // Apply first ingredient
+    std::vector<Property*> firstProps = PropertyMixCalculator::mixProperties(
+        initialProperties, firstProp, DrugType::Marijuana);
+
+    // Create stack state with first ingredient
+    std::vector<uint8_t> startSeq = { static_cast<uint8_t>(firstIngredient) };
+
+    // If target depth is 1, we're done
+    if (targetDepth == 1) {
+        float baseValueSum = 0.0f;
+        float addictiveness = 0.0f;
+        float valueMultiplier = 1.0f;
+
+        for (auto* p : firstProps) {
+            baseValueSum += p->addBaseValueMultiple;
+            addictiveness += p->addictiveness;
+            valueMultiplier *= p->valueMultiplier;
+        }
+
+        CompactPathEntry entry;
+        entry.ingredientSequence = startSeq;
+        entry.baseValueBonus = baseValueSum;
+        entry.addictiveness = addictiveness;
+        entry.valueMultiplier = valueMultiplier;
+
+        PropertySet propBits = propertiesToBitset(firstProps);
+        batchResult[propBits].push_back(entry);
+        return batchResult;
+    }
+
+    // For depth > 1, process in parallel
+    std::vector<std::thread> workers;
+    std::vector<PropertyPathTable> threadResults(numThreads);
+    std::atomic<size_t> sequencesProcessed(0);
+    std::atomic<int> completedThreads(0);
+
+    // Calculate how many ingredients each thread should handle
+    size_t totalIngredients = ingredientByBitPosition.size();
+    size_t ingredientsPerThread = (totalIngredients + numThreads - 1) / numThreads;
+
+    // Launch threads
+    for (int t = 0; t < numThreads; t++) {
+        size_t startIdx = t * ingredientsPerThread;
+        if (startIdx >= totalIngredients) continue;
+
+        size_t endIdx = std::min(startIdx + ingredientsPerThread, totalIngredients);
+
+        workers.push_back(std::thread([&, startIdx, endIdx, t]() {
+            // Process each 2nd-level ingredient in this thread's range
+            for (size_t secondIdx = startIdx; secondIdx < endIdx; secondIdx++) {
+                std::string secondIngName = ingredientByBitPosition[secondIdx];
+                Property* secondProp = getPropertyByNameOrId(ingredientPropertyMapping[secondIngName]);
+
+                if (!secondProp) continue;
+
+                // Apply second ingredient
+                std::vector<Property*> secondProps = PropertyMixCalculator::mixProperties(
+                    firstProps, secondProp, DrugType::Marijuana);
+
+                // Start sequence with first and second ingredients
+                std::vector<uint8_t> currentSeq = startSeq;
+                currentSeq.push_back(secondIdx);
+
+                // Stack-based processing for depth > 2
+                if (targetDepth > 2) {
+                    struct StackState {
+                        std::vector<uint8_t> sequence;
+                        std::vector<Property*> properties;
+                        size_t depth;
+
+                        StackState(const std::vector<uint8_t>& seq, const std::vector<Property*>& props, size_t d)
+                            : sequence(seq), properties(props), depth(d) {}
+                    };
+
+                    std::stack<StackState> dfsStack;
+                    dfsStack.push(StackState(currentSeq, secondProps, 2));
+
+                    while (!dfsStack.empty()) {
+                        StackState current = dfsStack.top();
+                        dfsStack.pop();
+
+                        // If reached target depth, add to results
+                        if (current.depth == targetDepth) {
+                            float baseValueSum = 0.0f;
+                            float addictiveness = 0.0f;
+                            float valueMultiplier = 1.0f;
+
+                            for (auto* p : current.properties) {
+                                baseValueSum += p->addBaseValueMultiple;
+                                addictiveness += p->addictiveness;
+                                valueMultiplier *= p->valueMultiplier;
+                            }
+
+                            CompactPathEntry entry;
+                            entry.ingredientSequence = current.sequence;
+                            entry.baseValueBonus = baseValueSum;
+                            entry.addictiveness = addictiveness;
+                            entry.valueMultiplier = valueMultiplier;
+
+                            PropertySet propBits = propertiesToBitset(current.properties);
+                            threadResults[t][propBits].push_back(entry);
+                            sequencesProcessed++;
+                            continue;
+                        }
+
+                        // Try each next ingredient
+                        for (size_t nextIdx = 0; nextIdx < totalIngredients; nextIdx++) {
+                            std::string nextIngName = ingredientByBitPosition[nextIdx];
+                            Property* nextProp = getPropertyByNameOrId(ingredientPropertyMapping[nextIngName]);
+
+                            if (nextProp) {
+                                std::vector<Property*> nextProps = PropertyMixCalculator::mixProperties(
+                                    current.properties, nextProp, DrugType::Marijuana);
+
+                                std::vector<uint8_t> nextSeq = current.sequence;
+                                nextSeq.push_back(nextIdx);
+
+                                dfsStack.push(StackState(nextSeq, nextProps, current.depth + 1));
+                            }
+                        }
+                    }
+                }
+                else {
+                    // For depth == 2, add directly to results
+                    float baseValueSum = 0.0f;
+                    float addictiveness = 0.0f;
+                    float valueMultiplier = 1.0f;
+
+                    for (auto* p : secondProps) {
+                        baseValueSum += p->addBaseValueMultiple;
+                        addictiveness += p->addictiveness;
+                        valueMultiplier *= p->valueMultiplier;
+                    }
+
+                    CompactPathEntry entry;
+                    entry.ingredientSequence = currentSeq;
+                    entry.baseValueBonus = baseValueSum;
+                    entry.addictiveness = addictiveness;
+                    entry.valueMultiplier = valueMultiplier;
+
+                    PropertySet propBits = propertiesToBitset(secondProps);
+                    threadResults[t][propBits].push_back(entry);
+                    sequencesProcessed++;
+                }
+            }
+        completedThreads++;
+            }));
+    }
+
+    // Progress monitoring with ETA
+    std::thread progressThread([&]() {
+        const int barWidth = 50;
+    auto startTime = std::chrono::steady_clock::now();
+    size_t lastCount = 0;
+
+    // Update every 2 seconds
+    const auto updateInterval = std::chrono::seconds(2);
+    auto lastUpdateTime = startTime;
+
+    while (completedThreads < workers.size()) {
+        auto now = std::chrono::steady_clock::now();
+
+        // Only update display at defined intervals
+        if (now - lastUpdateTime < updateInterval) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            continue;
+        }
+
+        auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - startTime).count();
+        auto updateElapsed = std::chrono::duration_cast<std::chrono::seconds>(now - lastUpdateTime).count();
+        if (updateElapsed == 0) updateElapsed = 1; // Avoid division by zero
+
+        // Calculate sequences per second
+        size_t currentCount = sequencesProcessed.load();
+        size_t seqPerSecond = (currentCount - lastCount) / updateElapsed;
+        lastCount = currentCount;
+        lastUpdateTime = now;
+
+        // Progress and ETA calculation
+        float progress = static_cast<float>(completedThreads) / workers.size();
+        int pos = static_cast<int>(barWidth * progress);
+
+        // Calculate ETA
+        int eta = 0;
+        if (progress > 0.01f && seqPerSecond > 0) {
+            eta = static_cast<int>((1.0f - progress) * elapsed / progress);
+        }
+
+        int etaHrs = eta / 3600;
+        int etaMins = (eta % 3600) / 60;
+        int etaSecs = eta % 60;
+
+        std::cout << "\r[";
+        for (int i = 0; i < barWidth; ++i) {
+            if (i < pos) std::cout << "=";
+            else if (i == pos) std::cout << ">";
+            else std::cout << " ";
+        }
+
+        std::cout << "] ";
+        std::cout << std::fixed << std::setprecision(1) << (progress * 100.0) << "%";
+        std::cout << " Threads: " << completedThreads << "/" << workers.size();
+        std::cout << " Speed: " << seqPerSecond << "/s";
+        std::cout << " ETA: " << std::setw(2) << std::setfill('0') << etaHrs << ":"
+            << std::setw(2) << std::setfill('0') << etaMins << ":"
+            << std::setw(2) << std::setfill('0') << etaSecs;
+        std::cout << std::flush;
+    }
+
+    // Final bar - simplified
+    std::cout << "\r[";
+    for (int i = 0; i < barWidth; ++i) std::cout << "=";
+    std::cout << "] 100% - Ingredient " << firstIngredient << " complete! ";
+    std::cout << sequencesProcessed << " sequences processed";
+    std::cout << std::endl;
+        });
+
+    // Wait for all worker threads
+    for (auto& thread : workers) {
+        if (thread.joinable()) {
+            thread.join();
+        }
+    }
+
+    // Wait for progress thread
+    if (progressThread.joinable()) {
+        progressThread.join();
+    }
+
+    // Merge thread results into batch result
+    for (int t = 0; t < numThreads; t++) {
+        mergePathTables(batchResult, threadResults[t]);
+    }
+
+    // Filter and sort the batch result
+    filterAndSortPathTable(batchResult);
+
+    return batchResult;
+}
+
+// Memory-efficient approach for generating combinations with incremental processing
+PropertyPathTable findAllPaths(int maxIngredientCount, int numThreads, const std::string& productName = "") {
+    PropertyPathTable globalPathTable;
+    std::vector<Property*> initialProperties;
+
+    // Get initial properties from product if provided
+    if (!productName.empty()) {
+        auto it = products.find(productName);
+        if (it != products.end()) {
+            initialProperties = it->second->properties;
+            std::cout << "Starting with " << productName << " properties:" << std::endl;
+            for (auto* prop : initialProperties) {
+                std::cout << " - " << prop->name << std::endl;
+            }
+        }
+    }
+
+    // Process one ingredient count at a time
+    for (int ingredientCount = 1; ingredientCount <= maxIngredientCount; ingredientCount++) {
+        std::cout << "\n========== Processing " << ingredientCount << " ingredient combinations ==========" << std::endl;
+
+        // For 1-ingredient paths, use simple processing
+        if (ingredientCount == 1) {
+            processSingleIngredientCombinations(globalPathTable, initialProperties);
+
+            // Save progress
+            std::string finalFile = "paths_" +
+                (productName.empty() ? "none" : productName) +
+                "_" + std::to_string(ingredientCount) + ".dat";
+
+            saveBinaryPathTable(globalPathTable, finalFile);
+            std::cout << "Completed 1-ingredient combinations." << std::endl;
+            std::cout << "Current unique property combinations: " << globalPathTable.size() << std::endl;
+            continue;
+        }
+
+        // For multi-ingredient paths, process one first-ingredient at a time
+        size_t totalIngredients = ingredientByBitPosition.size();
+        PropertyPathTable incrementalResults;
+
+        auto startTime = std::chrono::steady_clock::now();
+
+        for (size_t firstIdx = 0; firstIdx < totalIngredients; firstIdx++) {
+            std::cout << "\nProcessing first ingredient " << firstIdx + 1 << "/" << totalIngredients
+                << " (" << ingredientByBitPosition[firstIdx] << ")" << std::endl;
+
+            // Process this batch
+            PropertyPathTable batchResult = processIngredientBatch(
+                firstIdx, ingredientCount, initialProperties, numThreads);
+
+            // Get interim batch size
+            size_t batchCombinations = batchResult.size();
+
+            // Merge this batch into incremental results
+            std::cout << "Merging batch into incremental results..." << std::endl;
+            mergePathTables(incrementalResults, batchResult);
+
+            // Save interim results after each first ingredient
+            std::string interimFile = "paths_" +
+                (productName.empty() ? "none" : productName) +
+                "_" + std::to_string(ingredientCount) +
+                "_interim_" + std::to_string(firstIdx) + ".dat";
+
+            saveBinaryPathTable(incrementalResults, interimFile);
+
+            // Calculate overall progress
+            float overallProgress = (firstIdx + 1.0f) / totalIngredients;
+
+            // Calculate ETA
+            auto now = std::chrono::steady_clock::now();
+            auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - startTime).count();
+            int eta = 0;
+            if (overallProgress > 0.01f) {
+                eta = static_cast<int>((1.0f - overallProgress) * elapsed / overallProgress);
+            }
+
+            int etaHrs = eta / 3600;
+            int etaMins = (eta % 3600) / 60;
+            int etaSecs = eta % 60;
+
+            std::cout << "Overall progress: " << std::fixed << std::setprecision(1)
+                << (overallProgress * 100.0) << "%" << std::endl;
+            std::cout << "ETA: " << etaHrs << ":"
+                << std::setw(2) << std::setfill('0') << etaMins << ":"
+                << std::setw(2) << std::setfill('0') << etaSecs << std::endl;
+            std::cout << "Current unique property combinations: " << incrementalResults.size()
+                << " (+" << batchCombinations << " from this batch)" << std::endl;
+        }
+
+        // Final filtering and sorting
+        std::cout << "\nFinalizing results for " << ingredientCount << " ingredient combinations..." << std::endl;
+        filterAndSortPathTable(incrementalResults);
+
+        // Merge with global results
+        mergePathTables(globalPathTable, incrementalResults);
+
+        // Save final results for this ingredient count
+        std::string finalFile = "paths_" +
+            (productName.empty() ? "none" : productName) +
+            "_" + std::to_string(ingredientCount) + ".dat";
+
+        saveBinaryPathTable(globalPathTable, finalFile);
+        std::cout << "Completed " << ingredientCount << " ingredient combinations." << std::endl;
+        std::cout << "Total unique property combinations: " << globalPathTable.size() << std::endl;
+    }
+
+    return globalPathTable;
+}
+
+// =================== PATH SEARCH FUNCTION ===================
+
 // Find paths for desired properties
 void findPathsForDesiredProperties(const PropertyPathTable& table, const std::vector<std::string>& desiredPropertyIds) {
-
     std::cout << "Finding paths for properties: ";
     for (const auto& id : desiredPropertyIds) {
         std::cout << id << " ";
@@ -545,13 +940,10 @@ void findPathsForDesiredProperties(const PropertyPathTable& table, const std::ve
         }
     }
 
-    // Sort by ingredient count (fewer = better)
+    // Sort by ingredient count only (fewer = better)
     std::sort(matchingPaths.begin(), matchingPaths.end(),
         [](const auto& a, const auto& b) {
-            if (a.second.ingredientSequence.size() == b.second.ingredientSequence.size()) {
-                return a.second.baseValueBonus > b.second.baseValueBonus;
-            }
-    return a.second.ingredientSequence.size() < b.second.ingredientSequence.size();
+            return a.second.ingredientSequence.size() < b.second.ingredientSequence.size();
         });
 
     // Display results
@@ -605,159 +997,6 @@ void findPathsForDesiredProperties(const PropertyPathTable& table, const std::ve
     }
 }
 
-
-
-// Improved merging function that works in parallel
-void mergeResultsInParallel(PropertyPathTable& globalTable, std::vector<PropertyPathTable>& threadResults, int numThreads) {
-    std::cout << "Merging results from " << threadResults.size() << " threads..." << std::endl;
-
-    // First, gather all unique property bitsets
-    std::vector<PropertySet> allPropertySets;
-    std::mutex setsMutex;
-
-#pragma omp parallel for num_threads(numThreads)
-    for (size_t i = 0; i < threadResults.size(); i++) {
-        std::vector<PropertySet> threadSets;
-        for (const auto& [propBits, _] : threadResults[i]) {
-            threadSets.push_back(propBits);
-        }
-
-        // Add to global list
-        {
-            std::lock_guard<std::mutex> lock(setsMutex);
-            allPropertySets.insert(allPropertySets.end(), threadSets.begin(), threadSets.end());
-        }
-    }
-
-    // Remove duplicates
-    std::sort(allPropertySets.begin(), allPropertySets.end());
-    allPropertySets.erase(std::unique(allPropertySets.begin(), allPropertySets.end()), allPropertySets.end());
-
-    std::cout << "Found " << allPropertySets.size() << " unique property combinations." << std::endl;
-
-    // Process each property set in parallel
-    std::atomic<size_t> processedSets(0);
-    size_t totalSets = allPropertySets.size();
-    std::mutex globalTableMutex;
-
-    // Start progress thread for merging
-    std::thread progressThread([&processedSets, totalSets]() {
-        const int barWidth = 50;
-    while (processedSets < totalSets) {
-        float progress = static_cast<float>(processedSets) / totalSets;
-        int pos = static_cast<int>(barWidth * progress);
-
-        std::cout << "\r[";
-        for (int i = 0; i < barWidth; ++i) {
-            if (i < pos) std::cout << "=";
-            else if (i == pos) std::cout << ">";
-            else std::cout << " ";
-        }
-        std::cout << "] " << std::fixed << std::setprecision(1) << (progress * 100.0) << "%";
-        std::cout << " (" << processedSets << "/" << totalSets << ")";
-        std::cout << std::flush;
-
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    }
-
-    // Final bar
-    std::cout << "\r[";
-    for (int i = 0; i < barWidth; ++i) std::cout << "=";
-    std::cout << "] 100.0% (" << totalSets << "/" << totalSets << ")" << std::endl;
-        });
-
-    // Process property sets in chunks
-    const size_t chunkSize = (allPropertySets.size() + numThreads - 1) / numThreads;
-    std::vector<std::future<void>> mergeFutures;
-
-    for (size_t t = 0; t < numThreads; t++) {
-        size_t start = t * chunkSize;
-        if (start >= allPropertySets.size()) break;
-
-        size_t end = std::min(start + chunkSize, allPropertySets.size());
-
-        mergeFutures.push_back(std::async(std::launch::async, [&, start, end]() {
-            // Local table for this thread
-            PropertyPathTable localTable;
-
-        // Process assigned property sets
-        for (size_t i = start; i < end; i++) {
-            PropertySet propBits = allPropertySets[i];
-            std::vector<CompactPathEntry> allEntries;
-
-            // Gather entries from all thread results
-            for (auto& threadTable : threadResults) {
-                auto it = threadTable.find(propBits);
-                if (it != threadTable.end()) {
-                    allEntries.insert(allEntries.end(), it->second.begin(), it->second.end());
-                }
-            }
-
-            // Skip if no entries found (shouldn't happen, but just in case)
-            if (allEntries.empty()) {
-                processedSets++;
-                continue;
-            }
-
-            // Sort and filter entries
-            std::sort(allEntries.begin(), allEntries.end(),
-                [](const CompactPathEntry& a, const CompactPathEntry& b) {
-                    if (a.ingredientSequence.size() == b.ingredientSequence.size()) {
-                        return a.baseValueBonus > b.baseValueBonus;
-                    }
-            return a.ingredientSequence.size() < b.ingredientSequence.size();
-                });
-
-            // Keep only shortest paths
-            size_t shortestLength = allEntries[0].ingredientSequence.size();
-            allEntries.erase(
-                std::remove_if(allEntries.begin(), allEntries.end(),
-                    [shortestLength](const CompactPathEntry& entry) {
-                        return entry.ingredientSequence.size() > shortestLength;
-                    }),
-                allEntries.end()
-                        );
-
-            // Limit to top 5
-            if (allEntries.size() > 5) {
-                allEntries.resize(5);
-            }
-
-            // Add to local table
-            localTable[propBits] = allEntries;
-
-            // Update progress
-            processedSets++;
-        }
-
-        // Merge local table with global table
-        {
-            std::lock_guard<std::mutex> lock(globalTableMutex);
-            for (const auto& [propBits, entries] : localTable) {
-                globalTable[propBits] = entries;
-            }
-        }
-            }));
-    }
-
-    // Wait for all merge operations to complete
-    for (auto& f : mergeFutures) {
-        f.wait();
-    }
-
-    // Wait for progress thread
-    progressThread.join();
-
-    // Clear thread results to free memory
-    for (auto& threadTable : threadResults) {
-        PropertyPathTable empty;
-        threadTable.swap(empty);
-    }
-
-    std::cout << "Merge complete. Final table contains " << globalTable.size() << " entries." << std::endl;
-}
-
-
 // Free allocated memory
 void cleanup() {
     for (auto& pair : products) {
@@ -766,13 +1005,15 @@ void cleanup() {
     products.clear();
 }
 
+// =================== MAIN FUNCTION ===================
+
 int main() {
     // Initialize the property system
     initializeGameSystem();
     initializeProducts();
     initializeBitMappings();
 
-    std::cout << "===== Schedule I Property Path Generator (Hybrid) =====" << std::endl;
+    std::cout << "===== Schedule I Property Path Generator (Optimized) =====" << std::endl;
 
     // Ask user which product to start with
     std::cout << "\nAvailable products:" << std::endl;
@@ -802,19 +1043,35 @@ int main() {
         }
         else {
             // Generate new table
-            int maxIngredientCount = 8;  // Maximum number of ingredients to use
-            int threads = 24;            // Number of threads to use
+            int maxIngredientCount;
+            int threads;
 
-            pathTable = findAllPathsHybrid(maxIngredientCount, threads, productName);
+            std::cout << "Enter maximum number of ingredients (recommended 3-4 for first run): ";
+            std::cin >> maxIngredientCount;
+
+            std::cout << "Enter number of threads to use: ";
+            std::cin >> threads;
+
+            std::cin.ignore(); // Clear newline
+
+            pathTable = findAllPaths(maxIngredientCount, threads, productName);
             saveBinaryPathTable(pathTable, filename);
         }
     }
     else {
         // Generate new table
-        int maxIngredientCount = 8;  // Maximum number of ingredients to use
-        int threads = 24;            // Number of threads to use
+        int maxIngredientCount;
+        int threads;
 
-        pathTable = findAllPathsHybrid(maxIngredientCount, threads, productName);
+        std::cout << "Enter maximum number of ingredients (recommended 3-4 for first run): ";
+        std::cin >> maxIngredientCount;
+
+        std::cout << "Enter number of threads to use: ";
+        std::cin >> threads;
+
+        std::cin.ignore(); // Clear newline
+
+        pathTable = findAllPaths(maxIngredientCount, threads, productName);
         saveBinaryPathTable(pathTable, filename);
     }
 
